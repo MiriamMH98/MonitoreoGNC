@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Entornos virtuales y credenciales
+.env
+venv/
+env/
+
+# Archivos de Excel que no quieres versionar
+*.xlsx
+
+# Mac (u otros) archivos basura
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
