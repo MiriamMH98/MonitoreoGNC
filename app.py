@@ -4,6 +4,8 @@ import psycopg2
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
+import re
+
 
 # ----------------- Configuración de conexión -----------------
 @st.cache_resource
@@ -113,22 +115,22 @@ st.header(f"Variaciones de las últimas {n_semanas} semanas")
 st.table(df_var_int)
 
 st.subheader("Gráfica de descensos (Top 10)")
-# Top clientes con mayor caída
-cols = [c for c in df_var.columns if c.startswith('Var')]
-last = cols[-2]  # última variación
+cols = [c for c in df_var_int.columns if c.startswith('Var')]
+last = cols[-1]
 chart_data = df_var_int[last].abs().sort_values(ascending=False).head(10)
 plt.figure(figsize=(8,4))
 plt.bar(chart_data.index, chart_data.values)
 plt.xticks(rotation=45, ha='right')
 plt.title('Top 10 caídas absolutas')
+for i, val in enumerate(chart_data.values):
+    plt.text(i, val, f"{int(val):,}", ha='center', va='bottom', fontsize=8)
 st.pyplot(plt)
 
-
 # ——————————————————————
-# 3) Tendencia mensual normalizada y comparativas
+# 2) Tendencia mensual y forecast julio
 # ——————————————————————
+# 2.1. Históricos normalizados a 30 días\
 
-# 3.1. Traer todo el histórico de consumos normalizado a 30 días
 sql_full = """
   SELECT placa, fecha, cantidad
   FROM erelis2_ventas_total
@@ -137,33 +139,51 @@ sql_full = """
 with get_conn() as conn:
     df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
 
-df_full['fecha']     = pd.to_datetime(df_full['fecha'])
-df_full['mes']       = df_full['fecha'].dt.to_period('M').dt.to_timestamp()
-df_full['dias_mes']  = df_full['fecha'].dt.daysinmonth
-df_full['lit_norm']  = df_full['cantidad'] / df_full['dias_mes'] * 30
+# Normalizar a 30 días
+df_full['fecha']    = pd.to_datetime(df_full['fecha'])
+df_full['mes']      = df_full['fecha'].dt.to_period('M')
+df_full['dias_mes'] = df_full['fecha'].dt.daysinmonth
+df_full['lit_norm'] = df_full['cantidad'] / df_full['dias_mes'] * 30
+df_full['cliente']  = df_full['placa'].map(CLIENTE_MAP)
 
-# 3.2. Sumar litros normalizados por mes y placa
-df_plate = (
-    df_full
-    .groupby([df_full['mes'], 'placa'])['lit_norm']
-    .sum()
-    .reset_index()
+# Pivot mensual por cliente
+pivot_month = (
+    df_full.groupby([df_full['mes'], 'cliente'])['lit_norm']
+           .sum()
+           .unstack(fill_value=0)
 )
 
-# Mapear placa → cliente
-df_plate['cliente'] = df_plate['placa'].map(CLIENTE_MAP)
+# Forecast Holt-Winters
+forecast = {}
+for cliente in pivot_month.columns:
+    ts = pivot_month[cliente]
+    model = ExponentialSmoothing(ts, trend='add', seasonal=None,
+                                initialization_method='estimated')
+    fit = model.fit()
+    forecast[cliente] = fit.forecast(1).iloc[0]
 
-# 3.3. Sumar ahora por mes y cliente (deja un único registro por mes×cliente)
-df_monthly = (
-    df_plate
-    .groupby(['mes', 'cliente'])['lit_norm']
-    .sum()
-    .reset_index()
-)
+# Agregar forecast como nuevo mes
+df_trend = pivot_month.copy()
+next_period = df_trend.index.max() + 1
+if hasattr(df_trend.index, 'to_timestamp'):
+    next_period = df_trend.index.to_timestamp().max() + pd.offsets.MonthBegin()
+df_trend.loc[next_period] = pd.Series(forecast)
+idx_ts = df_trend.index.to_timestamp()
 
-# 3.4. Pivot para obtener la tabla de series, ya sin duplicados
-df_tend = df_monthly.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
-df_tend_table = df_tend.round(0).astype(int)
+# Graficar
+plt.figure(figsize=(12,6))
+for cliente in df_trend.columns:
+    plt.plot(idx_ts, df_trend[cliente], marker='o', label=cliente)
+    for x, y in zip(idx_ts, df_trend[cliente]):
+        plt.text(x, y, f"{y:,.0f}", ha='center', va='bottom', fontsize=8)
+
+plt.title('Tendencia mensual y forecast julio normalizado por cliente')
+plt.xlabel('Mes')
+plt.ylabel('Litros normalizados')
+plt.xticks(rotation=45)
+plt.legend(loc='center left', bbox_to_anchor=(1,0.5))
+plt.tight_layout()
+st.pyplot(plt)
 
 # ——————————————————————
 # 3.4) Comparativa mensual: Contenedor vs EDS Grupo CISA Monterrey
@@ -233,12 +253,6 @@ serie_cisa = (
     .sum()
     .reindex(pivot.index, fill_value=0)
 )
-
-st.subheader("Tendencia Mensual Normalizada por Cliente")
-st.line_chart(df_tend_table)
-
-st.subheader("Tabla de Tendencias (Litros)")
-st.table(df_tend_table)
 
 
 
