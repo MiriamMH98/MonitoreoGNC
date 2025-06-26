@@ -128,6 +128,19 @@ st.pyplot(plt)
 # 3) Tendencia mensual normalizada y comparativas
 # ——————————————————————
 
+# 3.2. Agregar por mes y por cliente
+df_monthly = (
+    df_full
+    .groupby([df_full['mes'], 'placa'])['lit_norm']
+    .sum()
+    .reset_index()
+)
+df_monthly['cliente'] = df_monthly['placa'].map(CLIENTE_MAP)
+
+# 3.3. Pivot para series y tablas
+df_tend = df_monthly.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
+df_tend_table = df_tend.round(0).astype(int)
+
 # ——————————————————————
 # 3.4) Comparativa mensual: Contenedor vs EDS Grupo CISA Monterrey
 # ——————————————————————
@@ -197,6 +210,14 @@ serie_cisa = (
     .reindex(pivot.index, fill_value=0)
 )
 
+st.subheader("Tendencia Mensual Normalizada por Cliente")
+st.line_chart(df_tend_table)
+
+st.subheader("Tabla de Tendencias (Litros)")
+st.table(df_tend_table)
+
+
+
 # 3) Graficar comparativa
 x = pivot.index.to_timestamp()
 
@@ -216,6 +237,7 @@ plt.xticks(rotation=45)
 plt.legend(loc='center left', bbox_to_anchor=(1,0.5))
 plt.tight_layout()
 st.pyplot(plt)
+
 
 
 
