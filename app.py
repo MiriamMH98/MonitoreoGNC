@@ -128,6 +128,20 @@ st.pyplot(plt)
 # 3) Tendencia mensual normalizada y comparativas
 # ——————————————————————
 
+# 3.1. Traer todo el histórico de consumos normalizado a 30 días
+sql_full = """
+  SELECT placa, fecha, cantidad
+  FROM erelis2_ventas_total
+  WHERE placa = ANY(%s)
+"""
+with get_conn() as conn:
+    df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
+
+df_full['fecha']     = pd.to_datetime(df_full['fecha'])
+df_full['mes']       = df_full['fecha'].dt.to_period('M').dt.to_timestamp()
+df_full['dias_mes']  = df_full['fecha'].dt.daysinmonth
+df_full['lit_norm']  = df_full['cantidad'] / df_full['dias_mes'] * 30
+
 # 3.2. Agregar por mes y por cliente
 df_monthly = (
     df_full
@@ -237,10 +251,6 @@ plt.xticks(rotation=45)
 plt.legend(loc='center left', bbox_to_anchor=(1,0.5))
 plt.tight_layout()
 st.pyplot(plt)
-
-
-
-
 
 
 
