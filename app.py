@@ -20,6 +20,8 @@ def get_conn():
 def consumo_variaciones_semanales(n_semanas=4):
     today = datetime.now().date()
     last_sunday = today - timedelta(days=(today.weekday()+1)%7)
+
+    # Generar rangos semanales
     ranges, end = [], last_sunday
     for _ in range(n_semanas):
         start = end - timedelta(days=6)
@@ -34,23 +36,40 @@ def consumo_variaciones_semanales(n_semanas=4):
     """
     semana_series = []
     PLACAS = list(CLIENTE_MAP.keys())
-    with get_conn() as conn:
-        for start, end in ranges:
-            dfw = pd.read_sql(sql, conn, params=(start, end + timedelta(days=1), PLACAS))
-            dfw['cliente'] = dfw['placa'].map(CLIENTE_MAP)
-            serie = dfw.groupby('cliente')['litros'].sum()
-            semana_series.append(serie)
 
+    # ----------- CAMBIO CLAVE -----------
+    # Abrimos y cerramos la conexión EN CADA ITERACIÓN
+    for start, end in ranges:
+        with get_conn() as conn:
+            dfw = pd.read_sql(
+                sql,
+                conn,
+                params=(start, end + timedelta(days=1), PLACAS)
+            )
+        dfw['cliente'] = dfw['placa'].map(CLIENTE_MAP)
+        serie = dfw.groupby('cliente')['litros'].sum()
+        semana_series.append(serie)
+    # ------------------------------------
+
+    # Concatenar resultados
     df_weeks = pd.concat(semana_series, axis=1).fillna(0)
-    labels = [f"Semana {i+1}: {s[0].strftime('%d %b')}–{s[1].strftime('%d %b')}" for i,s in enumerate(ranges)]
+
+    # Etiquetas de columnas
+    labels = [
+        f"Semana {i+1}: {s[0].strftime('%d %b')}–{s[1].strftime('%d %b')}"
+        for i, s in enumerate(ranges)
+    ]
     df_weeks.columns = labels
     df_weeks.drop(index="Contenedor de GNC NATGAS", errors='ignore', inplace=True)
-    # Variaciones
+
+    # Cálculo de variaciones
     for i in range(1, len(labels)):
-        curr, prev = labels[i-1], labels[i]
-        df_weeks[f"Var {i} (↓)"] = df_weeks[curr] - df_weeks[prev]
+        prev, curr = labels[i-1], labels[i]
+        df_weeks[f"Var {i} (↓)"] = df_weeks[prev] - df_weeks[curr]
+
     df_weeks['Total Litros'] = df_weeks[labels].sum(axis=1)
     return df_weeks
+
 
 # ----------------- Mapeo placa→cliente -----------------
 CLIENTE_MAP = {
@@ -85,18 +104,133 @@ n_semanas = st.sidebar.slider("Número de semanas", min_value=2, max_value=6, va
 
 st.header(f"Variaciones de las últimas {n_semanas} semanas")
 df_var = consumo_variaciones_semanales(n_semanas)
-st.table(df_var)
+df_var_int = df_var.round(0).astype(int)
+st.table(df_var_int)
+
+# ... tu código anterior ...
+
+# 1) Variaciones semanales
+df_var = consumo_variaciones_semanales(n_semanas)
+df_var_int = df_var.round(0).astype(int)
+st.header(f"Variaciones de las últimas {n_semanas} semanas")
+st.table(df_var_int)
+
+
+# Mapear placa → cliente
+df_monthly['cliente'] = df_monthly['placa'].map(CLIENTE_MAP)
+
+# 3.4. Pivot para obtener serie por cliente
+df_tend = df_monthly.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
+
+# 3.5. Extraer solo las dos series de interés
+df_comparativa = df_tend[['Contenedor de GNC NATGAS', 'EDS Grupo CISA']]
+
+# 3.6. Prepara una tabla con valores enteros
+df_tend_table = df_tend.round(0).astype(int)
+
+# ——————————————————————
+# Mostrar en Streamlit
+# ——————————————————————
+st.subheader("Tendencia Mensual Normalizada por Cliente")
+st.line_chart(df_tend_table)     # elimina decimales ya que es int
+
+st.subheader("Tabla de Tendencias (Litros)")
+st.table(df_tend_table)
+
+st.subheader("Comparativa: Contenedor GNC vs EDS Grupo CISA")
+st.line_chart(df_comparativa.astype(int))
+
+# 2) Gráfico Top 10 descensos
+last = [c for c in df_var_int.columns if c.startswith('Var')][-2]
+chart_data = df_var_int[last].abs().sort_values(ascending=False).head(10)
+plt.figure(figsize=(8,4))
+plt.bar(chart_data.index, chart_data.values)
+plt.xticks(rotation=45, ha='right')
+plt.title('Top 10 caídas absolutas')
+for i, val in enumerate(chart_data.values):
+    plt.text(i, val, f"{int(val):,}", ha='center', va='bottom', fontsize=8)
+st.pyplot(plt)
+
+# ——————————————————————
+# 3) Tendencia mensual normalizada y comparativas
+# ——————————————————————
+
+# 3.1. Traer todo el histórico de consumos normalizado a 30 días
+sql_full = """
+  SELECT placa, fecha, cantidad
+  FROM erelis2_ventas_total
+  WHERE placa = ANY(%s)
+"""
+with get_conn() as conn:
+    df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
+
+df_full['fecha']     = pd.to_datetime(df_full['fecha'])
+df_full['mes']       = df_full['fecha'].dt.to_period('M').dt.to_timestamp()
+df_full['dias_mes']  = df_full['fecha'].dt.daysinmonth
+df_full['lit_norm']  = df_full['cantidad'] / df_full['dias_mes'] * 30
+
+# 3.2. Agregar por mes y por cliente
+df_monthly = (
+    df_full
+    .groupby([df_full['mes'], 'placa'])['lit_norm']
+    .sum()
+    .reset_index()
+)
+df_monthly['cliente'] = df_monthly['placa'].map(CLIENTE_MAP)
+
+# 3.3. Pivot para series y tablas
+df_tend = df_monthly.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
+df_tend_table = df_tend.round(0).astype(int)
+
+# 3.4. Comparativa Contenedor vs EDS Grupo CISA
+df_comparativa = df_tend[['Contenedor de GNC NATGAS', 'EDS Grupo CISA']].round(0).astype(int)
+
+# ——————————————————————
+# Mostrar en Streamlit
+# ——————————————————————
+st.subheader("Tendencia Mensual Normalizada por Cliente")
+st.line_chart(df_tend_table)
+
+st.subheader("Tabla de Tendencias (Litros)")
+st.table(df_tend_table)
+
+st.subheader("Comparativa: Contenedor GNC vs EDS Grupo CISA")
+st.line_chart(df_comparativa)
+
+# 4) Comparativa Contenedor vs EDS Grupo CISA
+st.subheader("Comparativa: Contenedor GNC vs EDS Grupo CISA")
+st.line_chart(df_comparativa.astype(int))
+
 
 st.subheader("Gráfica de descensos (Top 10)")
 # Top clientes con mayor caída
 cols = [c for c in df_var.columns if c.startswith('Var')]
 last = cols[-2]  # última variación
-chart_data = df_var[last].abs().sort_values(ascending=False).head(10)
+chart_data = df_var_int[last].abs().sort_values(ascending=False).head(10)
 plt.figure(figsize=(8,4))
 plt.bar(chart_data.index, chart_data.values)
 plt.xticks(rotation=45, ha='right')
 plt.title('Top 10 caídas absolutas')
 st.pyplot(plt)
+
+# --- Gráfica de descensos semanales (última vs penúltima) ---
+# desc, lm, ls, pm, ps = consumo_semanal_completa()
+
+top10 = desc['caida_abs'].sort_values(ascending=False).head(10)
+
+plt.figure(figsize=(14,8))
+plt.bar(top10.index, top10.values)
+for i, val in enumerate(top10.values):
+    plt.text(i, val, f"{int(val):,}", ha='center', va='bottom', fontsize=8)
+
+plt.xticks(rotation=45, ha='right')
+plt.ylabel('Litros de caída')
+plt.title(f"Descensos semanales {lm} a {ls}")
+plt.tight_layout()
+plt.savefig('descensos_semana_vs_anterior.png', dpi=150)
+plt.show()
+print("Gráfico guardado en: descensos_semana_vs_anterior.png")
+
 
 # Resumen tipo correo
 st.subheader("Resumen automático")
@@ -106,5 +240,5 @@ for cli, row in df_var.iterrows():
     lines.append(f"- {cli}: Última caída {int(row[last]):,} L.")
 st.write("\n".join(lines))
 
-st.info("Desarrollado por el equipo de Análisis GNC.")
+st.info("Desarrollado por el equipo de planeación comercial.")
 
