@@ -128,67 +128,97 @@ st.pyplot(plt)
 # 3) Tendencia mensual normalizada y comparativas
 # ——————————————————————
 
-# 3.1. Traer todo el histórico de consumos normalizado a 30 días
-sql_full = """
-  SELECT placa, fecha, cantidad
-  FROM erelis2_ventas_total
-  WHERE placa = ANY(%s)
-"""
+# ——————————————————————
+# 3.4) Comparativa mensual: Contenedor vs EDS Grupo CISA Monterrey
+# ——————————————————————
+
+# 1) Primero obtén el id de la EDS “GRUPO CISA MONTERREY”
 with get_conn() as conn:
-    df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
+    df_id = pd.read_sql(
+        "SELECT id_eds FROM erelis2_cat_eds WHERE desc_oasis = %s",
+        conn, params=("GRUPO CISA MONTERREY",)
+    )
+    if df_id.empty:
+        st.error("No se encontró 'GRUPO CISA MONTERREY' en el catálogo de EDS")
+        st.stop()
+    id_cisa = int(df_id.at[0, "id_eds"])
 
-df_full['fecha']     = pd.to_datetime(df_full['fecha'])
-df_full['mes']       = df_full['fecha'].dt.to_period('M').dt.to_timestamp()
-df_full['dias_mes']  = df_full['fecha'].dt.daysinmonth
-df_full['lit_norm']  = df_full['cantidad'] / df_full['dias_mes'] * 30
+# 2a) Ventas normalizadas de tu Contenedor
+start = datetime(2024, 8, 1)
+end   = datetime.now() + timedelta(days=1)
 
-# 3.2. Agregar por mes y por placa, luego reagrupar en cliente
-pm = (
-    df_full
-    .groupby([df_full['mes'], 'placa'])['lit_norm']
+with get_conn() as conn:
+    df_cont = pd.read_sql(
+        """
+        SELECT placa, cantidad, fecha
+          FROM erelis2_ventas_total
+         WHERE placa = ANY(%s)
+           AND fecha >= %s AND fecha < %s
+        """,
+        conn, params=(PLACAS, start, end)
+    )
+
+df_cont['fecha']    = pd.to_datetime(df_cont['fecha'])
+df_cont['mes']      = df_cont['fecha'].dt.to_period('M')
+df_cont['dias_mes'] = df_cont['fecha'].dt.daysinmonth
+df_cont['lit_norm'] = df_cont['cantidad'] / df_cont['dias_mes'] * 30
+df_cont['cliente']  = df_cont['placa'].map(CLIENTE_MAP)
+
+pivot = (
+    df_cont
+    .groupby(['mes','cliente'])['lit_norm']
     .sum()
-    .reset_index()
+    .unstack(fill_value=0)
 )
-pm['cliente'] = pm['placa'].map(CLIENTE_MAP)
 
-# Ahora sumamos litros por cliente
-df_monthly = (
-    pm
-    .groupby(['mes', 'cliente'])['lit_norm']
+serie_container = pivot["Contenedor de GNC NATGAS"]
+
+# 2b) Ventas normalizadas de EDS Grupo CISA
+with get_conn() as conn:
+    df_cisa = pd.read_sql(
+        """
+        SELECT cantidad, fecha
+          FROM erelis2_ventas_total
+         WHERE erelis2_id_eds = %s
+           AND fecha >= %s AND fecha < %s
+        """,
+        conn, params=(id_cisa, start, end)
+    )
+
+df_cisa['fecha']    = pd.to_datetime(df_cisa['fecha'])
+df_cisa['mes']      = df_cisa['fecha'].dt.to_period('M')
+df_cisa['dias_mes'] = df_cisa['fecha'].dt.daysinmonth
+df_cisa['lit_norm'] = df_cisa['cantidad'] / df_cisa['dias_mes'] * 30
+
+serie_cisa = (
+    df_cisa
+    .groupby('mes')['lit_norm']
     .sum()
-    .reset_index()
+    .reindex(pivot.index, fill_value=0)
 )
 
-# 3.3. Pivot para series y tablas (ya no hay duplicados)
-df_tend = df_monthly.pivot(
-    index='mes',
-    columns='cliente',
-    values='lit_norm'
-).fillna(0)
-df_tend_table = df_tend.round(0).astype(int)
+# 3) Graficar comparativa
+x = pivot.index.to_timestamp()
 
-# 3.4. Comparativa Contenedor vs EDS Grupo CISA
-df_comparativa = df_tend[
-    ['Contenedor de GNC NATGAS', 'EDS Grupo CISA']
-].round(0).astype(int)
+plt.figure(figsize=(10,6))
+plt.plot(x, serie_container, marker='o', label='Contenedor de GNC NATGAS')
+plt.plot(x, serie_cisa,      marker='s', label='EDS Grupo CISA Monterrey')
 
+for xi, y in zip(x, serie_container):
+    plt.text(xi, y, f"{y:,.0f}", ha='center', va='bottom', fontsize=8)
+for xi, y in zip(x, serie_cisa):
+    plt.text(xi, y, f"{y:,.0f}", ha='center', va='bottom', fontsize=8)
 
-# 3.4. Comparativa Contenedor vs EDS Grupo CISA
-df_comparativa = df_tend[['Contenedor de GNC NATGAS', 'EDS Grupo CISA']].round(0).astype(int)
-
-# ——————————————————————
-# Mostrar en Streamlit
-# ——————————————————————
-st.subheader("Tendencia Mensual Normalizada por Cliente")
-st.line_chart(df_tend_table)
-
-st.subheader("Tabla de Tendencias (Litros)")
-st.table(df_tend_table)
+plt.title('Comparativa mensual normalizada\nContenedor vs EDS Grupo CISA Monterrey')
+plt.xlabel('Mes')
+plt.ylabel('Litros normalizados (30 días)')
+plt.xticks(rotation=45)
+plt.legend(loc='center left', bbox_to_anchor=(1,0.5))
+plt.tight_layout()
+st.pyplot(plt)
 
 
-# 4) Comparativa Contenedor vs EDS Grupo CISA
-st.subheader("Comparativa: Contenedor GNC vs EDS Grupo CISA")
-st.line_chart(df_comparativa.astype(int))
+
 
 
 
