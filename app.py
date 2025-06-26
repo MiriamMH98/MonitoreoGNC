@@ -102,12 +102,6 @@ st.title("Análisis Semanal de Consumo GNC")
 st.sidebar.header("Configuración")
 n_semanas = st.sidebar.slider("Número de semanas", min_value=2, max_value=6, value=4)
 
-st.header(f"Variaciones de las últimas {n_semanas} semanas")
-df_var = consumo_variaciones_semanales(n_semanas)
-df_var_int = df_var.round(0).astype(int)
-st.table(df_var_int)
-
-# ... tu código anterior ...
 
 # 1) Variaciones semanales
 df_var = consumo_variaciones_semanales(n_semanas)
@@ -115,41 +109,17 @@ df_var_int = df_var.round(0).astype(int)
 st.header(f"Variaciones de las últimas {n_semanas} semanas")
 st.table(df_var_int)
 
-
-# Mapear placa → cliente
-df_monthly['cliente'] = df_monthly['placa'].map(CLIENTE_MAP)
-
-# 3.4. Pivot para obtener serie por cliente
-df_tend = df_monthly.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
-
-# 3.5. Extraer solo las dos series de interés
-df_comparativa = df_tend[['Contenedor de GNC NATGAS', 'EDS Grupo CISA']]
-
-# 3.6. Prepara una tabla con valores enteros
-df_tend_table = df_tend.round(0).astype(int)
-
-# ——————————————————————
-# Mostrar en Streamlit
-# ——————————————————————
-st.subheader("Tendencia Mensual Normalizada por Cliente")
-st.line_chart(df_tend_table)     # elimina decimales ya que es int
-
-st.subheader("Tabla de Tendencias (Litros)")
-st.table(df_tend_table)
-
-st.subheader("Comparativa: Contenedor GNC vs EDS Grupo CISA")
-st.line_chart(df_comparativa.astype(int))
-
-# 2) Gráfico Top 10 descensos
-last = [c for c in df_var_int.columns if c.startswith('Var')][-2]
+st.subheader("Gráfica de descensos (Top 10)")
+# Top clientes con mayor caída
+cols = [c for c in df_var.columns if c.startswith('Var')]
+last = cols[-2]  # última variación
 chart_data = df_var_int[last].abs().sort_values(ascending=False).head(10)
 plt.figure(figsize=(8,4))
 plt.bar(chart_data.index, chart_data.values)
 plt.xticks(rotation=45, ha='right')
 plt.title('Top 10 caídas absolutas')
-for i, val in enumerate(chart_data.values):
-    plt.text(i, val, f"{int(val):,}", ha='center', va='bottom', fontsize=8)
 st.pyplot(plt)
+
 
 # ——————————————————————
 # 3) Tendencia mensual normalizada y comparativas
@@ -194,42 +164,11 @@ st.line_chart(df_tend_table)
 st.subheader("Tabla de Tendencias (Litros)")
 st.table(df_tend_table)
 
-st.subheader("Comparativa: Contenedor GNC vs EDS Grupo CISA")
-st.line_chart(df_comparativa)
 
 # 4) Comparativa Contenedor vs EDS Grupo CISA
 st.subheader("Comparativa: Contenedor GNC vs EDS Grupo CISA")
 st.line_chart(df_comparativa.astype(int))
 
-
-st.subheader("Gráfica de descensos (Top 10)")
-# Top clientes con mayor caída
-cols = [c for c in df_var.columns if c.startswith('Var')]
-last = cols[-2]  # última variación
-chart_data = df_var_int[last].abs().sort_values(ascending=False).head(10)
-plt.figure(figsize=(8,4))
-plt.bar(chart_data.index, chart_data.values)
-plt.xticks(rotation=45, ha='right')
-plt.title('Top 10 caídas absolutas')
-st.pyplot(plt)
-
-# --- Gráfica de descensos semanales (última vs penúltima) ---
-# desc, lm, ls, pm, ps = consumo_semanal_completa()
-
-top10 = desc['caida_abs'].sort_values(ascending=False).head(10)
-
-plt.figure(figsize=(14,8))
-plt.bar(top10.index, top10.values)
-for i, val in enumerate(top10.values):
-    plt.text(i, val, f"{int(val):,}", ha='center', va='bottom', fontsize=8)
-
-plt.xticks(rotation=45, ha='right')
-plt.ylabel('Litros de caída')
-plt.title(f"Descensos semanales {lm} a {ls}")
-plt.tight_layout()
-plt.savefig('descensos_semana_vs_anterior.png', dpi=150)
-plt.show()
-print("Gráfico guardado en: descensos_semana_vs_anterior.png")
 
 
 # Resumen tipo correo
