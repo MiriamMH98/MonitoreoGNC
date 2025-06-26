@@ -35,6 +35,7 @@ def consumo_variaciones_semanales(n_semanas=4):
       GROUP BY placa
     """
     semana_series = []
+
     PLACAS = list(CLIENTE_MAP.keys())
 
     # ----------- CAMBIO CLAVE -----------
@@ -95,6 +96,8 @@ CLIENTE_MAP = {
     '80UP7G':'Ganamex','81UP7G':'Ganamex','98UC2X':'Ganamex'
 
 }
+
+PLACAS = list(CLIENTE_MAP.keys())
 
 # ----------------- Interfaz Streamlit -----------------
 st.title("Análisis Semanal de Consumo GNC")
