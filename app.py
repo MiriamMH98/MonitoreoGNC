@@ -142,18 +142,36 @@ df_full['mes']       = df_full['fecha'].dt.to_period('M').dt.to_timestamp()
 df_full['dias_mes']  = df_full['fecha'].dt.daysinmonth
 df_full['lit_norm']  = df_full['cantidad'] / df_full['dias_mes'] * 30
 
-# 3.2. Agregar por mes y por cliente
-df_monthly = (
+# 3.2. Agregar por mes y por placa, luego reagrupar en cliente
+pm = (
     df_full
     .groupby([df_full['mes'], 'placa'])['lit_norm']
     .sum()
     .reset_index()
 )
-df_monthly['cliente'] = df_monthly['placa'].map(CLIENTE_MAP)
+pm['cliente'] = pm['placa'].map(CLIENTE_MAP)
 
-# 3.3. Pivot para series y tablas
-df_tend = df_monthly.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
+# Ahora sumamos litros por cliente
+df_monthly = (
+    pm
+    .groupby(['mes', 'cliente'])['lit_norm']
+    .sum()
+    .reset_index()
+)
+
+# 3.3. Pivot para series y tablas (ya no hay duplicados)
+df_tend = df_monthly.pivot(
+    index='mes',
+    columns='cliente',
+    values='lit_norm'
+).fillna(0)
 df_tend_table = df_tend.round(0).astype(int)
+
+# 3.4. Comparativa Contenedor vs EDS Grupo CISA
+df_comparativa = df_tend[
+    ['Contenedor de GNC NATGAS', 'EDS Grupo CISA']
+].round(0).astype(int)
+
 
 # 3.4. Comparativa Contenedor vs EDS Grupo CISA
 df_comparativa = df_tend[['Contenedor de GNC NATGAS', 'EDS Grupo CISA']].round(0).astype(int)
