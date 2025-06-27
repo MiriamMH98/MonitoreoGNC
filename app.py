@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import re
+import matplotlib.dates as mdates
 
 # ----------------- Configuración de conexión -----------------
 @st.cache_resource
@@ -141,7 +142,7 @@ for i, val in enumerate(chart_data.values):
 st.pyplot(plt)
 
 # ——————————————————————
-# 2) Tendencia mensual normalizada (jun 2024 – jun 2025) y forecast julio
+# 2) Tendencia mensual normalizada (jun 2024 – may 2025) y forecast julio
 # ——————————————————————
 sql_full = """
   SELECT placa, fecha, cantidad
@@ -150,88 +151,80 @@ sql_full = """
 """
 with get_conn() as conn:
     df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
-
 # Normalizar a 30 días
 df_full['fecha']    = pd.to_datetime(df_full['fecha'])
 df_full['mes']      = df_full['fecha'].dt.to_period('M')
 df_full['dias_mes'] = df_full['fecha'].dt.daysinmonth
 df_full['lit_norm'] = df_full['cantidad'] / df_full['dias_mes'] * 30
 df_full['cliente']  = df_full['placa'].map(CLIENTE_MAP)
-
-# Pivot mensual por cliente
-panel = (
-    df_full.groupby([df_full['mes'], 'cliente'])['lit_norm']
-           .sum()
-           .reset_index()
-)
+# Pivot mensual
+panel = df_full.groupby([df_full['mes'], 'cliente'])['lit_norm'].sum().reset_index()
 df_tend = panel.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
-
-# Filtrar periodo y excluir clientes
-start_period = pd.Period('2024-06','M')
-end_period   = pd.Period('2025-06','M')
-df_tend = df_tend.loc[start_period:end_period]
-df_tend = df_tend.drop(columns=['Contenedor de GNC NATGAS','Gas Natural Uruapan'], errors='ignore')
-# Renombrar clientes
+# Filtrar periodo
+df_tend = df_tend.loc[pd.Period('2024-06','M'):pd.Period('2025-05','M')]
+# Excluir y renombrar
+excl = ['Contenedor de GNC NATGAS','GAS NATURAL URUAPAN']
 rename_map = {'NEOMEXICANA DE GNC SA PI DE CV':'Neomexicana','ENERGAS DE MEXICO':'ENERGAS'}
-df_tend = df_tend.rename(columns=rename_map)
+
+df_tend = df_tend.drop(columns=excl, errors='ignore').rename(columns=rename_map)
 
 # Forecast Holt-Winters
 df_trend = df_tend.copy()
-forecast = {}
-for cliente in df_trend.columns:
-    ts = df_trend[cliente]
-    model = ExponentialSmoothing(ts, trend='add', seasonal=None, initialization_method='estimated')
-    fit = model.fit()
-    forecast_val = fit.forecast(1).iloc[0]
-    forecast[cliente] = forecast_val
+# calcular listas de clientes sobre df_tend
+df_clients = list(df_trend.columns)
+forecasts = {}
+for cli in df_clients:
+    try:
+        ts = df_trend[cli]
+        fit = ExponentialSmoothing(ts, trend='add', seasonal=None,
+                                   initialization_method='estimated').fit()
+        forecasts[cli] = fit.forecast(1).iloc[0]
+    except:
+        forecasts[cli] = None
 
-# Añadir forecast julio
+# Indices
 try:
-    idx_dates = df_trend.index.to_timestamp()
+    idx_months = df_trend.index.to_timestamp()
 except AttributeError:
-    idx_dates = pd.to_datetime(df_trend.index.astype(str))
-next_date = idx_dates.max() + pd.offsets.MonthBegin()
-df_trend.loc[next_date] = pd.Series(forecast)
-idx_dates = idx_dates.append(pd.DatetimeIndex([next_date]))
+    idx_months = pd.to_datetime(df_trend.index.astype(str))
+# añadir forecast
+next_month = idx_months.max() + pd.offsets.MonthBegin()
+df_trend.loc[next_month] = pd.Series(forecasts)
+idx_dates = idx_months.append(pd.DatetimeIndex([next_month]))
 
-# 2.5) Graficar tendencia y forecast en dos grupos según umbral, distinguiendo forecast
 # ——————————————————————
-threshold = 200000  # litros
+# 2.5) Graficar por umbral y distinguir forecast con color histórico
+# ——————————————————————
+threshold = 200000
+# separar high/low según df_tend (sin forecast)
+high_clients = [c for c in df_clients if (df_tend[c] > threshold).any()]
+low_clients  = [c for c in df_clients if c not in high_clients]
 
-# Determinar clientes que superaron el umbral en algún mes
-hist = df_tend
-high_clients = [c for c in hist.columns if (hist[c] > threshold).any()]
-low_clients = [c for c in hist.columns if c not in high_clients]
-
-# Función para plot con etiquetas diferenciadas y línea divisora
 def plot_group(clients_list, title):
     plt.figure(figsize=(12,6))
     for cli in clients_list:
-        # series histórica y forecast
         vals = df_trend[cli]
-        hist_idx = idx_dates[:-1]
-        hist_vals = vals[:-1]
-        fc_idx = idx_dates[-1]
+        hist = vals[:-1]
         fc_val = vals.iloc[-1]
-        # plot histórico
-        plt.plot(hist_idx, hist_vals, marker='o', linestyle='-', label=cli)
-        # plot forecast
-        plt.plot([fc_idx], [fc_val], marker='X', linestyle='', label=f'{cli} (forecast)')
+        fc_date = idx_dates[-1]
+        # plot histórico y capturar color
+        line, = plt.plot(idx_dates[:-1], hist, marker='o', label=cli)
+        # plot forecast con mismo color
+        plt.plot([fc_date], [fc_val], marker='X', linestyle='', color=line.get_color())
         # anotaciones
-        for x, y in zip(hist_idx, hist_vals):
+        for x, y in zip(idx_dates[:-1], hist):
             plt.text(x, y, f"{int(y):,}", ha='center', va='bottom', fontsize=8)
-        plt.text(fc_idx, fc_val, f"{int(fc_val):,}", ha='center', va='bottom', fontsize=8)
-    # línea divisora en la frontera histórico/forecast
-    div_x = idx_dates[-1]
-    plt.axvline(x=div_x, color='gray', linestyle='--')
-    # formateo
-    plt.title(title)
-    plt.xlabel('Mes')
-    plt.ylabel('Litros normalizados (30 días)')
+        plt.text(fc_date, fc_val, f"{int(fc_val):,}", ha='center', va='bottom', fontsize=8)
+    plt.axvline(idx_dates[-2], color='gray', linestyle='--')
+    ax = plt.gca()
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
     plt.xticks(rotation=45)
+    plt.title(title)
+    plt.ylabel('Litros normalizados (30 días)')
     plt.legend(loc='center left', bbox_to_anchor=(1,0.5), fontsize=8)
     plt.tight_layout()
     st.pyplot(plt)
+
 
 # 2.5a) Clientes con algún mes > threshold
 st.subheader(f"Clientes grandes (base 30): > {threshold:,} L")
