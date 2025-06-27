@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import re
 
-
 # ----------------- Configuración de conexión -----------------
 @st.cache_resource
 def get_conn():
@@ -17,62 +16,6 @@ def get_conn():
         host="erelis-prod.postgres.database.azure.com",
         port=5432
     )
-
-# ----------------- Funciones de cálculo -----------------
-def consumo_variaciones_semanales(n_semanas=4):
-    today = datetime.now().date()
-    last_sunday = today - timedelta(days=(today.weekday()+1)%7)
-
-    # Generar rangos semanales
-    ranges, end = [], last_sunday
-    for _ in range(n_semanas):
-        start = end - timedelta(days=6)
-        ranges.append((start, end))
-        end = start - timedelta(days=1)
-
-    sql = """
-      SELECT placa, SUM(cantidad) AS litros
-      FROM erelis2_ventas_total
-      WHERE fecha >= %s AND fecha < %s AND placa = ANY(%s)
-      GROUP BY placa
-    """
-    semana_series = []
-
-    PLACAS = list(CLIENTE_MAP.keys())
-
-    # ----------- CAMBIO CLAVE -----------
-    # Abrimos y cerramos la conexión EN CADA ITERACIÓN
-    for start, end in ranges:
-        with get_conn() as conn:
-            dfw = pd.read_sql(
-                sql,
-                conn,
-                params=(start, end + timedelta(days=1), PLACAS)
-            )
-        dfw['cliente'] = dfw['placa'].map(CLIENTE_MAP)
-        serie = dfw.groupby('cliente')['litros'].sum()
-        semana_series.append(serie)
-    # ------------------------------------
-
-    # Concatenar resultados
-    df_weeks = pd.concat(semana_series, axis=1).fillna(0)
-
-    # Etiquetas de columnas
-    labels = [
-        f"Semana {i+1}: {s[0].strftime('%d %b')}–{s[1].strftime('%d %b')}"
-        for i, s in enumerate(ranges)
-    ]
-    df_weeks.columns = labels
-    df_weeks.drop(index="Contenedor de GNC NATGAS", errors='ignore', inplace=True)
-
-    # Cálculo de variaciones
-    for i in range(1, len(labels)):
-        prev, curr = labels[i-1], labels[i]
-        df_weeks[f"Var {i} (↓)"] = df_weeks[prev] - df_weeks[curr]
-
-    df_weeks['Total Litros'] = df_weeks[labels].sum(axis=1)
-    return df_weeks
-
 
 # ----------------- Mapeo placa→cliente -----------------
 CLIENTE_MAP = {
@@ -100,6 +43,77 @@ CLIENTE_MAP = {
 }
 
 PLACAS = list(CLIENTE_MAP.keys())
+
+
+
+
+# ----------------- Funciones de cálculo -----------------
+def consumo_variaciones_semanales(n_semanas=4):
+    """
+    Retorna un DataFrame con las variaciones semanales de consumo para las últimas n_semanas.
+    """
+    today = datetime.now().date()
+    # Último domingo como endpoint
+    last_sunday = today - timedelta(days=(today.weekday()+1)%7)
+
+    # Generar rangos semanales
+    ranges = []
+    end = last_sunday
+    for _ in range(n_semanas):
+        start = end - timedelta(days=6)
+        ranges.append((start, end))
+        end = start - timedelta(days=1)
+
+    sql = """
+      SELECT placa, SUM(cantidad) AS litros
+      FROM erelis2_ventas_total
+      WHERE fecha >= %s AND fecha < %s AND placa = ANY(%s)
+      GROUP BY placa
+    """
+
+    semana_series = []
+    # Ciclo con conexión manual para evitar recursividad
+    for start, end in ranges:
+        conn = psycopg2.connect(
+            dbname="postgres",
+            user="erelis_admin",
+            password="WQyS2HkgE7jRSi",
+            host="erelis-prod.postgres.database.azure.com",
+            port=5432
+        )
+        try:
+            dfw = pd.read_sql(
+                sql,
+                conn,
+                params=(start, end + timedelta(days=1), PLACAS)
+            )
+        finally:
+            conn.close()
+
+        dfw['cliente'] = dfw['placa'].map(CLIENTE_MAP)
+        serie = dfw.groupby('cliente')['litros'].sum()
+        semana_series.append(serie)
+
+    # Concatenar resultados
+    df_weeks = pd.concat(semana_series, axis=1).fillna(0)
+
+    # Etiquetas de columnas basado en ranges
+    labels = [
+        f"Semana {i+1}: {s[0].strftime('%d %b')}–{s[1].strftime('%d %b')}"
+        for i, s in enumerate(ranges)
+    ]
+    df_weeks.columns = labels
+    df_weeks.drop(index="Contenedor de GNC NATGAS", errors='ignore', inplace=True)
+
+    # Calcular variaciones semana a semana
+    for i in range(1, len(labels)):
+        prev, curr = labels[i-1], labels[i]
+        df_weeks[f"Var {i} (↓)"] = df_weeks[prev] - df_weeks[curr]
+
+    df_weeks['Total Litros'] = df_weeks[labels].sum(axis=1)
+    return df_weeks
+
+
 
 # ----------------- Interfaz Streamlit -----------------
 st.title("Análisis Semanal de Consumo GNC")
