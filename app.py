@@ -194,23 +194,37 @@ next_date = idx_dates.max() + pd.offsets.MonthBegin()
 df_trend.loc[next_date] = pd.Series(forecast)
 idx_dates = idx_dates.append(pd.DatetimeIndex([next_date]))
 
-# ——————————————————————
-# 2.5) Graficar tendencia y forecast en dos grupos según umbral
+# 2.5) Graficar tendencia y forecast en dos grupos según umbral, distinguiendo forecast
 # ——————————————————————
 threshold = 200000  # litros
 
-# Determinar clientes que superaron el umbral en algún mes (solo histórico junio2024–junio2025)
-hist = df_tend  # DataFrame sin fila forecast
+# Determinar clientes que superaron el umbral en algún mes
+hist = df_tend
 high_clients = [c for c in hist.columns if (hist[c] > threshold).any()]
 low_clients = [c for c in hist.columns if c not in high_clients]
 
-# Función para plot con anotaciones
+# Función para plot con etiquetas diferenciadas y línea divisora
 def plot_group(clients_list, title):
     plt.figure(figsize=(12,6))
     for cli in clients_list:
-        plt.plot(idx_dates, df_trend[cli], marker='o', label=cli)
-        for x, y in zip(idx_dates, df_trend[cli]):
+        # series histórica y forecast
+        vals = df_trend[cli]
+        hist_idx = idx_dates[:-1]
+        hist_vals = vals[:-1]
+        fc_idx = idx_dates[-1]
+        fc_val = vals.iloc[-1]
+        # plot histórico
+        plt.plot(hist_idx, hist_vals, marker='o', linestyle='-', label=cli)
+        # plot forecast
+        plt.plot([fc_idx], [fc_val], marker='X', linestyle='', label=f'{cli} (forecast)')
+        # anotaciones
+        for x, y in zip(hist_idx, hist_vals):
             plt.text(x, y, f"{int(y):,}", ha='center', va='bottom', fontsize=8)
+        plt.text(fc_idx, fc_val, f"{int(fc_val):,}", ha='center', va='bottom', fontsize=8)
+    # línea divisora en la frontera histórico/forecast
+    div_x = idx_dates[-1]
+    plt.axvline(x=div_x, color='gray', linestyle='--')
+    # formateo
     plt.title(title)
     plt.xlabel('Mes')
     plt.ylabel('Litros normalizados (30 días)')
@@ -220,12 +234,12 @@ def plot_group(clients_list, title):
     st.pyplot(plt)
 
 # 2.5a) Clientes con algún mes > threshold
-st.subheader(f"Clientes con algún mes > {threshold:,} L")
-plot_group(high_clients, f"Tendencia mensual y forecast (>{threshold:,} L)")
+st.subheader(f"Clientes grandes (base 30): > {threshold:,} L")
+plot_group(high_clients, f"Tendencia (> {threshold:,} L)")
 
 # 2.5b) Clientes sin superar threshold nunca
-st.subheader(f"Clientes sin ningún mes > {threshold:,} L")
-plot_group(low_clients, f"Tendencia mensual y forecast (≤{threshold:,} L)")
+st.subheader(f"Clientes con menores litros (base 30): > {threshold:,} L")
+plot_group(low_clients, f"Tendencia (≤ {threshold:,} L)")
 
 
 # ——————————————————————
