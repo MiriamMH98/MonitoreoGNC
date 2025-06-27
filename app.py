@@ -141,7 +141,7 @@ for i, val in enumerate(chart_data.values):
 st.pyplot(plt)
 
 # ——————————————————————
-# 2) Tendencia mensual y forecast julio
+# 2) Tendencia mensual normalizada (jun 2024 – jun 2025) y forecast julio
 # ——————————————————————
 sql_full = """
   SELECT placa, fecha, cantidad
@@ -153,51 +153,57 @@ with get_conn() as conn:
 
 # Normalizar a 30 días
 df_full['fecha']    = pd.to_datetime(df_full['fecha'])
-df_full['mes']      = df_full['fecha'].dt.to_period('M')  # PeriodIndex
+df_full['mes']      = df_full['fecha'].dt.to_period('M')
 df_full['dias_mes'] = df_full['fecha'].dt.daysinmonth
 df_full['lit_norm'] = df_full['cantidad'] / df_full['dias_mes'] * 30
 df_full['cliente']  = df_full['placa'].map(CLIENTE_MAP)
 
 # Pivot mensual por cliente
-df_plate = (
+panel = (
     df_full.groupby([df_full['mes'], 'cliente'])['lit_norm']
            .sum()
            .reset_index()
 )
-df_tend = df_plate.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
+df_tend = panel.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
+
+# Filtrar periodo y excluir clientes
+start_period = pd.Period('2024-06','M')
+end_period   = pd.Period('2025-06','M')
+df_tend = df_tend.loc[start_period:end_period]
+df_tend = df_tend.drop(columns=['Contenedor de GNC NATGAS','Gas Natural Uruapan'], errors='ignore')
+# Renombrar clientes
+rename_map = {'NEOMEXICANA DE GNC SA PI DE CV':'Neomexicana','ENERGAS DE MEXICO':'ENERGAS'}
+df_tend = df_tend.rename(columns=rename_map)
 
 # Forecast Holt-Winters
+df_trend = df_tend.copy()
 forecast = {}
-for cliente in df_tend.columns:
-    ts = df_tend[cliente]
-    model = ExponentialSmoothing(ts, trend='add', seasonal=None,
-                                initialization_method='estimated')
+for cliente in df_trend.columns:
+    ts = df_trend[cliente]
+    model = ExponentialSmoothing(ts, trend='add', seasonal=None, initialization_method='estimated')
     fit = model.fit()
     forecast_val = fit.forecast(1).iloc[0]
     forecast[cliente] = forecast_val
 
-# Construir df_trend con forecast
-df_trend = df_tend.copy()
-# PeriodIndex => convertir a timestamp para gráficos
+# Añadir forecast julio
 try:
     idx_dates = df_trend.index.to_timestamp()
 except AttributeError:
     idx_dates = pd.to_datetime(df_trend.index.astype(str))
-# Añadir forecast como nueva fila
-date_next = idx_dates.max() + pd.offsets.MonthBegin()
-df_trend.loc[date_next] = pd.Series(forecast)
-idx_dates = idx_dates.append(pd.DatetimeIndex([date_next]))
+next_date = idx_dates.max() + pd.offsets.MonthBegin()
+df_trend.loc[next_date] = pd.Series(forecast)
+idx_dates = idx_dates.append(pd.DatetimeIndex([next_date]))
 
-# Graficar
+# Graficar tendencia y forecast
 plt.figure(figsize=(12,6))
 for cliente in df_trend.columns:
     plt.plot(idx_dates, df_trend[cliente], marker='o', label=cliente)
     for x, y in zip(idx_dates, df_trend[cliente]):
         plt.text(x, y, f"{y:,.0f}", ha='center', va='bottom', fontsize=8)
 
-plt.title('Tendencia mensual y forecast julio normalizado por cliente')
+plt.title('Tendencia mensual y forecast (Jun 2024 - Jun 2025)')
 plt.xlabel('Mes')
-plt.ylabel('Litros normalizados')
+plt.ylabel('Litros normalizados (30 días)')
 plt.xticks(rotation=45)
 plt.legend(loc='center left', bbox_to_anchor=(1,0.5))
 plt.tight_layout()
@@ -300,7 +306,7 @@ st.pyplot(plt)
 # Resumen tipo correo
 st.subheader("Resumen automático")
 # Construir texto
-lines = [f"Descrecimiento total semana-a-semana: {int(df_var[last].sum()):,} L."]
+lines = [f"Decrecimiento total semana-a-semana: {int(df_var[last].sum()):,} L."]
 for cli, row in df_var.iterrows():
     lines.append(f"- {cli}: Última caída {int(row[last]):,} L.")
 st.write("\n".join(lines))
