@@ -143,8 +143,6 @@ st.pyplot(plt)
 # ——————————————————————
 # 2) Tendencia mensual y forecast julio
 # ——————————————————————
-# 2.1. Históricos normalizados a 30 días\
-
 sql_full = """
   SELECT placa, fecha, cantidad
   FROM erelis2_ventas_total
@@ -155,40 +153,46 @@ with get_conn() as conn:
 
 # Normalizar a 30 días
 df_full['fecha']    = pd.to_datetime(df_full['fecha'])
-df_full['mes']      = df_full['fecha'].dt.to_period('M')
+df_full['mes']      = df_full['fecha'].dt.to_period('M')  # PeriodIndex
 df_full['dias_mes'] = df_full['fecha'].dt.daysinmonth
 df_full['lit_norm'] = df_full['cantidad'] / df_full['dias_mes'] * 30
 df_full['cliente']  = df_full['placa'].map(CLIENTE_MAP)
 
 # Pivot mensual por cliente
-pivot_month = (
+df_plate = (
     df_full.groupby([df_full['mes'], 'cliente'])['lit_norm']
            .sum()
-           .unstack(fill_value=0)
+           .reset_index()
 )
+df_tend = df_plate.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
 
 # Forecast Holt-Winters
 forecast = {}
-for cliente in pivot_month.columns:
-    ts = pivot_month[cliente]
+for cliente in df_tend.columns:
+    ts = df_tend[cliente]
     model = ExponentialSmoothing(ts, trend='add', seasonal=None,
                                 initialization_method='estimated')
     fit = model.fit()
-    forecast[cliente] = fit.forecast(1).iloc[0]
+    forecast_val = fit.forecast(1).iloc[0]
+    forecast[cliente] = forecast_val
 
-# Agregar forecast como nuevo mes
-df_trend = pivot_month.copy()
-next_period = df_trend.index.max() + 1
-if hasattr(df_trend.index, 'to_timestamp'):
-    next_period = df_trend.index.to_timestamp().max() + pd.offsets.MonthBegin()
-df_trend.loc[next_period] = pd.Series(forecast)
-idx_ts = df_trend.index.to_timestamp()
+# Construir df_trend con forecast
+df_trend = df_tend.copy()
+# PeriodIndex => convertir a timestamp para gráficos
+try:
+    idx_dates = df_trend.index.to_timestamp()
+except AttributeError:
+    idx_dates = pd.to_datetime(df_trend.index.astype(str))
+# Añadir forecast como nueva fila
+date_next = idx_dates.max() + pd.offsets.MonthBegin()
+df_trend.loc[date_next] = pd.Series(forecast)
+idx_dates = idx_dates.append(pd.DatetimeIndex([date_next]))
 
 # Graficar
 plt.figure(figsize=(12,6))
 for cliente in df_trend.columns:
-    plt.plot(idx_ts, df_trend[cliente], marker='o', label=cliente)
-    for x, y in zip(idx_ts, df_trend[cliente]):
+    plt.plot(idx_dates, df_trend[cliente], marker='o', label=cliente)
+    for x, y in zip(idx_dates, df_trend[cliente]):
         plt.text(x, y, f"{y:,.0f}", ha='center', va='bottom', fontsize=8)
 
 plt.title('Tendencia mensual y forecast julio normalizado por cliente')
@@ -198,6 +202,7 @@ plt.xticks(rotation=45)
 plt.legend(loc='center left', bbox_to_anchor=(1,0.5))
 plt.tight_layout()
 st.pyplot(plt)
+
 
 # ——————————————————————
 # 3.4) Comparativa mensual: Contenedor vs EDS Grupo CISA Monterrey
