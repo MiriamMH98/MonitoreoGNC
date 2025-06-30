@@ -368,7 +368,38 @@ plt.legend(loc='center left', bbox_to_anchor=(1,0.5))
 plt.tight_layout()
 st.pyplot(plt)
 
-
+# ----------------- Alerta placas no registradas -----------------
+# Detectar cargas con manguera 13 o 15 de placas no registradas
+sql_alert = """
+    SELECT placa, id_manguera, fecha, cantidad
+    FROM erelis2_ventas_total
+    WHERE id_manguera IN (13,15)
+      AND fecha >= %s
+"""
+today = datetime.now().date()
+with get_conn() as conn:
+    df_alert = pd.read_sql(sql_alert, conn, params=(today,))
+# Filtrar placas no en CLIENTE_MAP
+df_alert_no_map = df_alert[~df_alert['placa'].isin(PLACAS)]
+if not df_alert_no_map.empty:
+    st.error("Se detectaron cargas con placas no registradas en CLIENTE_MAP:")
+    # Mostrar lista única de cargas
+    st.table(df_alert_no_map[['placa','id_manguera','fecha','cantidad']].drop_duplicates())
+    # Calcular litros mensuales por placa
+    df_alert_no_map['mes'] = pd.to_datetime(df_alert_no_map['fecha']).dt.to_period('M')
+    sum_monthly = (
+        df_alert_no_map
+        .groupby(['placa','mes'])['cantidad']
+        .sum()
+        .reset_index()
+        .rename(columns={'cantidad':'litros_totales_mes'})
+    )
+    # Mostrar consumo mensual
+    st.subheader("Consumo mensual de placas no registradas")
+    sum_monthly['mes'] = sum_monthly['mes'].astype(str)
+    st.table(sum_monthly)
+else:
+    st.success("No hay cargas de manguera 13/15 de placas no registradas.")
 
 # Resumen tipo correo
 st.subheader("Resumen automático")
