@@ -306,6 +306,18 @@ with get_conn() as conn:
 # --- FILTRO ESPECÍFICO PARA CONTENEDOR ---
 df_cont = df_cont[df_cont['placa'].isin(['E5772', '7HU2382'])]
 
+# DEBUG: Verificar litros crudos por placa
+sum_placas = (
+    df_cont
+    .groupby('placa')['cantidad']
+    .sum()
+    .reset_index()
+    .rename(columns={'cantidad': 'litros_crudos_totales'})
+)
+st.subheader("Debug: suma de litros crudos por placa")
+st.table(sum_placas)
+
+
 df_cont['fecha']    = pd.to_datetime(df_cont['fecha'])
 df_cont['mes']      = df_cont['fecha'].dt.to_period('M')
 df_cont['dias_mes'] = df_cont['fecha'].dt.daysinmonth
