@@ -384,7 +384,7 @@ df_alert_no_map = df_alert[~df_alert['placa'].isin(PLACAS)]
 if not df_alert_no_map.empty:
     st.error("Se detectaron cargas con placas no registradas en CLIENTE_MAP:")
     # Mostrar lista única de cargas
-    st.table(df_alert_no_map[['placa','id_manguera','fecha','cantidad']].drop_duplicates())
+    st.table(df_alert_no_map[['placa','erelis2_id_manguera','fecha','cantidad']].drop_duplicates())
     # Calcular litros mensuales por placa
     df_alert_no_map['mes'] = pd.to_datetime(df_alert_no_map['fecha']).dt.to_period('M')
     sum_monthly = (
