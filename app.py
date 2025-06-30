@@ -371,9 +371,9 @@ st.pyplot(plt)
 # ----------------- Alerta placas no registradas -----------------
 # Detectar cargas con manguera 13 o 15 de placas no registradas
 sql_alert = """
-    SELECT placa, id_manguera, fecha, cantidad
+    SELECT placa, erelis2_id_manguera, fecha, cantidad
     FROM erelis2_ventas_total
-    WHERE id_manguera IN (13,15)
+    WHERE erelis2_id_manguera IN (13,15)
       AND fecha >= %s
 """
 today = datetime.now().date()
