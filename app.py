@@ -265,12 +265,84 @@ def plot_group(clients_list, title):
 
 
 # 2.5a) Clientes con algún mes > threshold
-st.subheader(f"Clientes grandes (base 30): > {threshold:,} L")
+st.subheader(f"forecast clientes gran volumen litros (base 30): > {threshold:,} L")
 plot_group(high_clients, f"Tendencia (> {threshold:,} L)")
 
 # 2.5b) Clientes sin superar threshold nunca
-st.subheader(f"Clientes con menores litros (base 30): > {threshold:,} L")
+st.subheader(f"forecast clientes menor volumen litros (base 30): > {threshold:,} L")
 plot_group(low_clients, f"Tendencia (≤ {threshold:,} L)")
+
+# ——————————————————————
+# X) Gráfico Apilado: Consumo Mensual Histórico (Jun 2024 – último mes)
+# ——————————————————————
+
+st.subheader("Consumo Mensual Histórico Apilado")
+
+# 1) Tirar la misma consulta de df_full que ya usas:
+sql_full = """
+  SELECT placa, fecha, cantidad
+  FROM erelis2_ventas_total
+  WHERE placa = ANY(%s)
+"""
+with get_conn() as conn:
+    df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
+
+# 2) Mapear cliente, periodo y agrupar
+df_full['cliente'] = df_full['placa'].map(CLIENTE_MAP)
+df_full['fecha']   = pd.to_datetime(df_full['fecha'])
+df_full['mes']     = df_full['fecha'].dt.to_period('M')
+
+clients = ["PERC","ENCO","Neomexicana","ENERGAS","Ganamex","Green House"]
+df_princ = df_full[df_full['cliente'].isin(clients)]
+
+mensual = (
+    df_princ
+    .groupby(['mes','cliente'])['cantidad']
+    .sum()
+    .unstack(fill_value=0)
+)
+
+# 3) Reindexar desde junio 2024 hasta el último mes con datos
+primer_mes   = pd.Period("2024-06", freq="M")
+ultimo_mes   = mensual.index.max()
+todos_meses  = pd.period_range(primer_mes, ultimo_mes, freq="M")
+mensual_comp = mensual.reindex(todos_meses, fill_value=0)
+
+# 4) Prepara etiquetas y posiciones
+labels = mensual_comp.index.strftime("%Y-%m")
+x      = np.arange(len(labels))
+
+# 5) Colores personalizados (sin rojos ni púrpuras)
+colors = ["#002B49","#808080","#8B4513","#6B8E23","#20B2AA","#4682B4"]
+
+# 6) Dibujar el stacked‐bar y anotar
+fig, ax = plt.subplots(figsize=(12,6))
+bottom = np.zeros(len(x))
+
+for idx, cli in enumerate(mensual_comp.columns):
+    vals = mensual_comp[cli].values
+    ax.bar(x, vals, 0.8, bottom=bottom, color=colors[idx], label=cli)
+    # etiqueta cada segmento
+    for xi, yi, bi in zip(x, vals, bottom):
+        if yi > 0:
+            ax.text(xi, bi + yi/2, f"{yi:,.0f}", ha='center', va='center', fontsize=6)
+    bottom += vals
+
+# etiqueta total mensual
+for xi, tot in zip(x, bottom):
+    ax.text(xi, tot + max(bottom)*0.01, f"{int(tot):,}", ha='center', va='bottom',
+            fontsize=8, fontweight='bold')
+
+# 7) formato de ejes y leyenda
+ax.set_xticks(x)
+ax.set_xticklabels(labels, rotation=45)
+ax.set_xlabel("Mes")
+ax.set_ylabel("Litros cargados")
+ax.set_title(f"Consumo Mensual Histórico Apilado (Jun 2024 – {ultimo_mes.strftime('%Y-%m')})")
+ax.legend(loc='center left', bbox_to_anchor=(1,0.5))
+
+plt.tight_layout()
+st.pyplot(fig)
 
 
 # ——————————————————————
@@ -404,9 +476,9 @@ else:
 # Resumen tipo correo
 st.subheader("Resumen automático")
 # Construir texto
-lines = [f"Decrecimiento total semana-a-semana: {int(df_var[last].sum()):,} L."]
+lines = [f" total semana-a-semana: {int(df_var[last].sum()):,} L."]
 for cli, row in df_var.iterrows():
-    lines.append(f"- {cli}: Última caída {int(row[last]):,} L.")
+    lines.append(f"- {cli}: Última variación: {int(row[last]):,} L.")
 st.write("\n".join(lines))
 
 st.info("Desarrollado por el equipo de planeación comercial.")
