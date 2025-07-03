@@ -7,6 +7,7 @@ from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import re
 import matplotlib.dates as mdates
 import matplotlib
+import numpy as np
 
 # ----------------- Configuración de conexión -----------------
 @st.cache_resource
@@ -280,6 +281,7 @@ plot_group(low_clients, f"Tendencia (≤ {threshold:,} L)")
 st.subheader("Consumo Mensual Histórico Apilado")
 
 # 1) Tirar la misma consulta de df_full que ya usas:
+
 sql_full = """
   SELECT placa, fecha, cantidad
   FROM erelis2_ventas_total
