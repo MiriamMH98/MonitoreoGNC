@@ -1,13 +1,14 @@
 import streamlit as st
 import pandas as pd
 import psycopg2
+import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import re
 import matplotlib.dates as mdates
 import matplotlib
-import numpy as np
+
 
 # ----------------- Configuración de conexión -----------------
 @st.cache_resource
@@ -287,8 +288,8 @@ sql_full = """
   FROM erelis2_ventas_total
   WHERE placa = ANY(%s)
 """
-with get_conn() as conn:
-    df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
+conn = get_conn()  # recupera la conexión cacheada
+df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
 
 # 2) Mapear cliente, periodo y agrupar
 df_full['cliente'] = df_full['placa'].map(CLIENTE_MAP)
