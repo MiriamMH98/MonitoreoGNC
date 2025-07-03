@@ -304,12 +304,11 @@ conn = get_conn()  # recupera la conexión cacheada
 df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
 df_princ = df_full[df_full['cliente'].isin(clients)]
 
-df_full=df_princ
 
 # 2) Mapear cliente, periodo y agrupar
-df_full['cliente'] = df_full['placa'].map(CLIENTE_MAP)
-df_full['fecha']   = pd.to_datetime(df_full['fecha'])
-df_full['mes']     = df_full['fecha'].dt.to_period('M')
+df_princ['cliente'] = df_princ['placa'].map(CLIENTE_MAP)
+df_princ['fecha']   = pd.to_datetime(df_princ['fecha'])
+df_princ['mes']     = df_princ['fecha'].dt.to_period('M')
 
 
 mensual = (
