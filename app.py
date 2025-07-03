@@ -21,6 +21,8 @@ def get_conn():
         port=5432
     )
 
+
+
 # ----------------- Mapeo placa→cliente -----------------
 CLIENTE_MAP = {
     '51UD2U':'NEOMEXICANA DE GNC SA PI DE CV', 
@@ -86,6 +88,17 @@ CLIENTE_MAP = {
 
 PLACAS = list(CLIENTE_MAP.keys())
 
+
+clients = [
+  "COMERCIAL Y TRANSPORTE GNC",
+  "ENCO",
+  "NEOMEXICANA DE GNC SA PI DE CV",
+  "ENERGAS DE MEXICO",
+  "Ganamex",
+  "Green House"
+]
+df_princ = df_full[df_full['cliente'].isin(clients)]
+# …más tarde, cuando hagas la gráfica, ahí sí aplicas rename_map si quieres mostrar los apodos
 
 
 
@@ -283,6 +296,7 @@ st.subheader("Consumo Mensual Histórico Apilado")
 
 # 1) Tirar la misma consulta de df_full que ya usas:
 
+
 sql_full = """
   SELECT placa, fecha, cantidad
   FROM erelis2_ventas_total
@@ -296,8 +310,6 @@ df_full['cliente'] = df_full['placa'].map(CLIENTE_MAP)
 df_full['fecha']   = pd.to_datetime(df_full['fecha'])
 df_full['mes']     = df_full['fecha'].dt.to_period('M')
 
-clients = ["PERC","ENCO","Neomexicana","ENERGAS","Ganamex","Green House"]
-df_princ = df_full[df_full['cliente'].isin(clients)]
 
 mensual = (
     df_princ
