@@ -97,8 +97,6 @@ clients = [
   "Ganamex",
   "Green House"
 ]
-df_princ = df_full[df_full['cliente'].isin(clients)]
-# …más tarde, cuando hagas la gráfica, ahí sí aplicas rename_map si quieres mostrar los apodos
 
 
 
@@ -304,6 +302,9 @@ sql_full = """
 """
 conn = get_conn()  # recupera la conexión cacheada
 df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
+df_princ = df_full[df_full['cliente'].isin(clients)]
+
+df_full=df_princ
 
 # 2) Mapear cliente, periodo y agrupar
 df_full['cliente'] = df_full['placa'].map(CLIENTE_MAP)
@@ -500,4 +501,3 @@ for cli, row in df_var.iterrows():
 st.write("\n".join(lines))
 
 st.info("Desarrollado por el equipo de planeación comercial.")
-
