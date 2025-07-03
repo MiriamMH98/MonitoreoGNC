@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import re
 import matplotlib.dates as mdates
+import matplotlib
 
 # ----------------- Configuración de conexión -----------------
 @st.cache_resource
@@ -334,6 +335,8 @@ for xi, tot in zip(x, bottom):
             fontsize=8, fontweight='bold')
 
 # 7) formato de ejes y leyenda
+# forzar Arial en todos los textos de Matplotlib
+matplotlib.rcParams['font.family'] = 'Arial'
 ax.set_xticks(x)
 ax.set_xticklabels(labels, rotation=45)
 ax.set_xlabel("Mes")
