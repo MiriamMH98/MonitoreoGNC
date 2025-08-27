@@ -213,7 +213,11 @@ df_full['cliente']  = df_full['placa'].map(CLIENTE_MAP)
 panel = df_full.groupby([df_full['mes'], 'cliente'])['lit_norm'].sum().reset_index()
 df_tend = panel.pivot(index='mes', columns='cliente', values='lit_norm').fillna(0)
 # Filtrar periodo
-df_tend = df_tend.loc[pd.Period('2024-06','M'):pd.Period('2025-05','M')]
+# Filtrar periodo dinámico: últimos 12 meses desde el actual
+mes_actual = pd.Timestamp.now().to_period('M')
+mes_inicio = mes_actual - 11
+df_tend = df_tend.loc[mes_inicio:mes_actual]
+
 # Excluir y renombrar
 excl = ['Contenedor de GNC NATGAS','GAS NATURAL URUAPAN']
 rename_map = {'NEOMEXICANA DE GNC SA PI DE CV':'Neomexicana','ENERGAS DE MEXICO':'ENERGAS'}
@@ -329,7 +333,10 @@ mensual = (
 )
 
 # 6) Forzar presencia de TODOS los meses y TODOS los clientes
-primer_mes   = pd.Period("2024-06", freq="M")
+
+# Filtrar periodo dinámico: últimos 12 meses desde el actual
+mes_actual = pd.Timestamp.now().to_period('M')
+primer_mes = mes_actual - 11
 ultimo_mes   = mensual.index.max()
 todos_meses  = pd.period_range(primer_mes, ultimo_mes, freq="M")
 
@@ -342,7 +349,7 @@ mensual_comp = mensual.reindex(
 # 7) Graficar stacked‐bar con etiquetas
 labels = mensual_comp.index.strftime("%Y-%m")
 x      = np.arange(len(labels))
-colors = ["#8B4513","#00008B","#6B8E23","#20B2AA","#4682B4","#808080"]
+colors = ["#8B4513","#002B49","#6B8E23","#082B29","#99C7EE","#444343"]
 
 fig, ax = plt.subplots(figsize=(12,6))
 bottom = np.zeros(len(x))
