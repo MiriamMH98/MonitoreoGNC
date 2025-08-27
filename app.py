@@ -374,7 +374,7 @@ ax.set_xticks(x)
 ax.set_xticklabels(labels, rotation=45)
 ax.set_xlabel("Mes")
 ax.set_ylabel("Litros cargados")
-ax.set_title(f"Consumo Mensual Histórico Apilado (Jun 2024 – {labels[-1]})")
+ax.set_title(f"Consumo Mensual Histórico Apilado ({labels[-12]} – {labels[-1]})")
 ax.legend(loc='center left', bbox_to_anchor=(1,0.5))
 
 plt.tight_layout()
