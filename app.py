@@ -86,6 +86,15 @@ CLIENTE_MAP = {
 
 }
 
+def cargar_clientes_nuevos():
+    if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
+        with open(ARCHIVO_CLIENTES_NUEVOS, mode='r', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                CLIENTE_MAP[row['placa']] = row['cliente']
+
+cargar_clientes_nuevos()
+
 PLACAS = list(CLIENTE_MAP.keys())
 
 
@@ -168,12 +177,39 @@ def consumo_variaciones_semanales(n_semanas=4):
 
 
 
+
 # ----------------- Interfaz Streamlit -----------------
 st.title("Análisis Semanal de Consumo GNC")
 
 st.sidebar.header("Configuración")
 n_semanas = st.sidebar.slider("Número de semanas", min_value=2, max_value=6, value=4)
 
+st.sidebar.subheader("➕ Agregar nueva placa")
+with st.sidebar.form(key="form_nueva_placa"):
+    nueva_placa = st.text_input("Placa", max_chars=20)
+    nuevo_cliente = st.text_input("Cliente")
+    submit = st.form_submit_button("Guardar")
+
+    if submit and nueva_placa and nuevo_cliente:
+        nueva_placa = nueva_placa.strip().upper()
+        nuevo_cliente = nuevo_cliente.strip()
+        
+        if nueva_placa in CLIENTE_MAP:
+            st.warning("La placa ya está registrada.")
+        else:
+            # Actualiza mapa en tiempo real
+            CLIENTE_MAP[nueva_placa] = nuevo_cliente
+            PLACAS.append(nueva_placa)
+            
+            # Guarda en CSV (crea si no existe)
+            nuevo = not os.path.exists(ARCHIVO_CLIENTES_NUEVOS)
+            with open(ARCHIVO_CLIENTES_NUEVOS, mode='a', newline='', encoding='utf-8') as file:
+                writer = csv.writer(file)
+                if nuevo:
+                    writer.writerow(['placa', 'cliente'])  # encabezado
+                writer.writerow([nueva_placa, nuevo_cliente])
+
+            st.success(f"Placa {nueva_placa} registrada para cliente '{nuevo_cliente}'.")
 
 # 1) Variaciones semanales
 df_var = consumo_variaciones_semanales(n_semanas)
@@ -517,20 +553,3 @@ if not df_alert_no_map.empty:
 else:
     st.success("✅ No hay cargas recientes con mangueras 13/15 de placas no registradas.")
 
-
-# 2. Revisar todas las placas activas en BD en los últimos 6 meses
-sql_placas_activas = """
-    SELECT DISTINCT placa
-    FROM erelis2_ventas_total
-    WHERE fecha >= %s
-"""
-with get_conn() as conn:
-    df_placas_activas = pd.read_sql(sql_placas_activas, conn, params=(desde_fecha,))
-
-placas_activas = set(df_placas_activas['placa'])
-placas_mapeadas = set(CLIENTE_MAP.keys())
-placas_nuevas = sorted(placas_activas - placas_mapeadas)
-
-if placas_nuevas:
-    st.warning("⚠️ También se detectaron placas activas no registradas en CLIENTE_MAP (últimos 6 meses):")
-    st.write(placas_nuevas)
