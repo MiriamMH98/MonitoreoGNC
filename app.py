@@ -336,7 +336,7 @@ mensual = (
 
 # Filtrar periodo dinámico: últimos 12 meses desde el actual
 mes_actual = pd.Timestamp.now().to_period('M')
-primer_mes = mes_actual - 11
+primer_mes = mes_actual - 12
 ultimo_mes   = mensual.index.max()
 todos_meses  = pd.period_range(primer_mes, ultimo_mes, freq="M")
 
@@ -374,7 +374,6 @@ ax.set_xticks(x)
 ax.set_xticklabels(labels, rotation=45)
 ax.set_xlabel("Mes")
 ax.set_ylabel("Litros cargados")
-ax.set_title(f"Consumo Mensual Histórico Apilado ({labels[-12]} – {labels[-1]})")
 ax.legend(loc='center left', bbox_to_anchor=(1,0.5))
 
 plt.tight_layout()
@@ -478,22 +477,31 @@ st.pyplot(plt)
 
 # ----------------- Alerta placas no registradas -----------------
 # Detectar cargas con manguera 13 o 15 de placas no registradas
+from datetime import datetime, timedelta
+
+# ----------------- Alerta placas no registradas -----------------
+
+# Definir rango de revisión (últimos 6 meses)
+desde_fecha = datetime.now().date() - timedelta(days=180)
+
+# 1. Detectar cargas con manguera 13 o 15 de placas no registradas
 sql_alert = """
     SELECT placa, erelis2_id_manguera, fecha, cantidad
     FROM erelis2_ventas_total
     WHERE erelis2_id_manguera IN (13,15)
       AND fecha >= %s
 """
-today = datetime.now().date()
 with get_conn() as conn:
-    df_alert = pd.read_sql(sql_alert, conn, params=(today,))
-# Filtrar placas no en CLIENTE_MAP
-df_alert_no_map = df_alert[~df_alert['placa'].isin(PLACAS)]
+    df_alert = pd.read_sql(sql_alert, conn, params=(desde_fecha,))
+
+# Filtrar placas no registradas
+df_alert_no_map = df_alert[~df_alert['placa'].isin(CLIENTE_MAP.keys())]
+
 if not df_alert_no_map.empty:
-    st.error("Se detectaron cargas con placas no registradas en CLIENTE_MAP:")
-    # Mostrar lista única de cargas
-    st.table(df_alert_no_map[['placa','erelis2_id_manguera','fecha','cantidad']].drop_duplicates())
-    # Calcular litros mensuales por placa
+    st.error("🚨 Se detectaron cargas con placas no registradas en CLIENTE_MAP:")
+    st.table(df_alert_no_map[['placa', 'erelis2_id_manguera', 'fecha', 'cantidad']].drop_duplicates())
+
+    # Consumo mensual por placa no registrada
     df_alert_no_map['mes'] = pd.to_datetime(df_alert_no_map['fecha']).dt.to_period('M')
     sum_monthly = (
         df_alert_no_map
@@ -502,19 +510,27 @@ if not df_alert_no_map.empty:
         .reset_index()
         .rename(columns={'cantidad':'litros_totales_mes'})
     )
-    # Mostrar consumo mensual
-    st.subheader("Consumo mensual de placas no registradas")
     sum_monthly['mes'] = sum_monthly['mes'].astype(str)
+
+    st.subheader("Consumo mensual de placas no registradas")
     st.table(sum_monthly)
 else:
-    st.success("No hay cargas de manguera 13/15 de placas no registradas.")
+    st.success("✅ No hay cargas recientes con mangueras 13/15 de placas no registradas.")
 
-# Resumen tipo correo
-st.subheader("Resumen automático")
-# Construir texto
-lines = [f" total semana-a-semana: {int(df_var[last].sum()):,} L."]
-for cli, row in df_var.iterrows():
-    lines.append(f"- {cli}: Última variación: {int(row[last]):,} L.")
-st.write("\n".join(lines))
 
-st.info("Desarrollado por el equipo de planeación comercial.")
+# 2. Revisar todas las placas activas en BD en los últimos 6 meses
+sql_placas_activas = """
+    SELECT DISTINCT placa
+    FROM erelis2_ventas_total
+    WHERE fecha >= %s
+"""
+with get_conn() as conn:
+    df_placas_activas = pd.read_sql(sql_placas_activas, conn, params=(desde_fecha,))
+
+placas_activas = set(df_placas_activas['placa'])
+placas_mapeadas = set(CLIENTE_MAP.keys())
+placas_nuevas = sorted(placas_activas - placas_mapeadas)
+
+if placas_nuevas:
+    st.warning("⚠️ También se detectaron placas activas no registradas en CLIENTE_MAP (últimos 6 meses):")
+    st.write(placas_nuevas)
