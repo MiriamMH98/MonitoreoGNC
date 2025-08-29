@@ -202,8 +202,8 @@ with st.sidebar.form(key="form_nueva_placa"):
             PLACAS.append(nueva_placa)
             
             # Guarda en CSV (crea si no existe)
-            nuevo = not os.path.exists(ARCHIVO_CLIENTES_NUEVOS)
-            with open(ARCHIVO_CLIENTES_NUEVOS, mode='a', newline='', encoding='utf-8') as file:
+            nuevo = not os.path.exists(clientes_nuevos)
+            with open(clientes_nuevos, mode='a', newline='', encoding='utf-8') as file:
                 writer = csv.writer(file)
                 if nuevo:
                     writer.writerow(['placa', 'cliente'])  # encabezado
