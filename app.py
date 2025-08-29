@@ -341,6 +341,7 @@ plot_group(low_clients, f"Tendencia (≤ {threshold:,} L)")
 # ——————————————————————
 # X) Consumo Mensual Histórico Apilado
 # ——————————————————————
+# ----------------- X) Consumo Mensual Histórico Apilado -----------------
 import numpy as np
 
 st.subheader("Consumo Mensual Histórico Apilado")
@@ -351,12 +352,13 @@ sql_full = """
   FROM erelis2_ventas_total
   WHERE placa = ANY(%s)
 """
-# No uses 'with' sobre get_conn() cacheada para evitar el error de reentrada
 conn    = get_conn()
 df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
 
-# 2) Mapear y renombrar clientes a tus alias cortos
+# 2) Mapear clientes (incluye nuevos de CSV si ya se cargaron)
 df_full['cliente'] = df_full['placa'].map(CLIENTE_MAP)
+
+# 3) Renombrar a alias cortos si aplica
 rename_map = {
     'COMERCIAL Y TRANSPORTE GNC':     'PERC',
     'NEOMEXICANA DE GNC SA PI DE CV': 'Neomexicana',
@@ -364,15 +366,25 @@ rename_map = {
 }
 df_full['cliente'] = df_full['cliente'].replace(rename_map)
 
-# 3) Preparar mes
+# 4) Preparar mes
 df_full['fecha'] = pd.to_datetime(df_full['fecha'])
 df_full['mes']   = df_full['fecha'].dt.to_period('M')
 
-# 4) Filtrar sólo tus 6 clientes principales (alias cortos)
-clients = ["PERC","ENCO","Neomexicana","ENERGAS","Ganamex","Green House"]
-df_princ = df_full[df_full['cliente'].isin(clients)]
+# 5) Detectar clientes únicos disponibles para graficar (sin Contenedor)
+clientes_disponibles = df_full['cliente'].dropna().unique().tolist()
+clientes_disponibles = [c for c in clientes_disponibles if c != 'Contenedor de GNC NATGAS']
 
-# 5) Agrupar y pivotar (unstack)
+# 6) Selector en app
+clientes_graf = st.multiselect(
+    "Clientes a mostrar en gráfico apilado",
+    options=sorted(clientes_disponibles),
+    default=sorted(clientes_disponibles)[:6]
+)
+
+# 7) Filtrar sólo los seleccionados
+df_princ = df_full[df_full['cliente'].isin(clientes_graf)]
+
+# 8) Agrupar y pivotar
 mensual = (
     df_princ
     .groupby(['mes','cliente'])['cantidad']
@@ -380,52 +392,49 @@ mensual = (
     .unstack(fill_value=0)
 )
 
-# 6) Forzar presencia de TODOS los meses y TODOS los clientes
-
-# Filtrar periodo dinámico: últimos 12 meses desde el actual
-mes_actual = pd.Timestamp.now().to_period('M')
-primer_mes = mes_actual - 12
+# 9) Forzar todos los meses y columnas
+mes_actual   = pd.Timestamp.now().to_period('M')
+primer_mes   = mes_actual - 12
 ultimo_mes   = mensual.index.max()
 todos_meses  = pd.period_range(primer_mes, ultimo_mes, freq="M")
 
 mensual_comp = mensual.reindex(
     index   = todos_meses,
-    columns = clients,
+    columns = clientes_graf,
     fill_value=0
 )
 
-# 7) Graficar stacked‐bar con etiquetas
+# 10) Graficar stacked‐bar con etiquetas
 labels = mensual_comp.index.strftime("%Y-%m")
 x      = np.arange(len(labels))
-colors = ["#8B4513","#002B49","#6B8E23","#082B29","#99C7EE","#444343"]
+colors = plt.cm.tab20.colors  # más colores si hay más clientes
 
 fig, ax = plt.subplots(figsize=(12,6))
 bottom = np.zeros(len(x))
 
-for idx, cli in enumerate(clients):
+for idx, cli in enumerate(clientes_graf):
     vals = mensual_comp[cli].values
-    ax.bar(x, vals, 0.8, bottom=bottom, color=colors[idx], label=cli)
-    # etiqueta dentro de cada segmento
+    ax.bar(x, vals, 0.8, bottom=bottom, color=colors[idx % len(colors)], label=cli)
     for xi, yi, bi in zip(x, vals, bottom):
         if yi > 0:
             ax.text(xi, bi + yi/2, f"{yi:,.0f}", ha='center', va='center', fontsize=6)
     bottom += vals
 
-# etiqueta total por mes
+# Total por mes
 for xi, tot in zip(x, bottom):
     ax.text(xi, tot + max(bottom)*0.01,
             f"{int(tot):,}", ha='center', va='bottom',
             fontsize=8, fontweight='bold')
 
-# formato ejes y leyenda
+# Formato
 ax.set_xticks(x)
 ax.set_xticklabels(labels, rotation=45)
 ax.set_xlabel("Mes")
 ax.set_ylabel("Litros cargados")
 ax.legend(loc='center left', bbox_to_anchor=(1,0.5))
-
 plt.tight_layout()
 st.pyplot(fig)
+
 
 
 # ——————————————————————
