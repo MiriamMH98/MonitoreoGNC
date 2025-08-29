@@ -88,6 +88,9 @@ CLIENTE_MAP = {
 
 }
 
+ARCHIVO_CLIENTES_NUEVOS = "clientes_nuevos.csv"
+
+
 def cargar_clientes_nuevos():
     if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
         with open(ARCHIVO_CLIENTES_NUEVOS, mode='r', encoding='utf-8') as file:
