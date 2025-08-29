@@ -9,7 +9,7 @@ import re
 import matplotlib.dates as mdates
 import matplotlib
 import os
-
+import csv
 
 
 # ----------------- Configuración de conexión -----------------
@@ -91,12 +91,19 @@ CLIENTE_MAP = {
 ARCHIVO_CLIENTES_NUEVOS = "clientes_nuevos.csv"
 
 
+
 def cargar_clientes_nuevos():
     if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
-        with open(ARCHIVO_CLIENTES_NUEVOS, mode='r', encoding='utf-8') as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                CLIENTE_MAP[row['placa']] = row['cliente']
+        try:
+            with open(ARCHIVO_CLIENTES_NUEVOS, newline='', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    placa = row.get('placa')
+                    cliente = row.get('cliente')
+                    if placa and cliente:
+                        CLIENTE_MAP[placa.strip()] = cliente.strip()
+        except Exception as e:
+            st.warning(f"⚠️ No se pudo cargar 'clientes_nuevos.csv': {e}")
 
 cargar_clientes_nuevos()
 
