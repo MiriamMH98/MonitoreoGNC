@@ -90,23 +90,19 @@ CLIENTE_MAP = {
 
 ARCHIVO_CLIENTES_NUEVOS = "clientes_nuevos.csv"
 
-
-
+# 1. Cargar clientes nuevos desde CSV al inicio
 def cargar_clientes_nuevos():
     if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
-        try:
-            with open(ARCHIVO_CLIENTES_NUEVOS, newline='', encoding='utf-8') as file:
-                reader = csv.DictReader(file)
-                for row in reader:
-                    placa = row.get('placa')
-                    cliente = row.get('cliente')
-                    if placa and cliente:
-                        CLIENTE_MAP[placa.strip()] = cliente.strip()
-        except Exception as e:
-            st.warning(f"⚠️ No se pudo cargar 'clientes_nuevos.csv': {e}")
+        with open(ARCHIVO_CLIENTES_NUEVOS, "r", encoding="utf-8") as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                placa = row["placa"].strip()
+                cliente = row["cliente"].strip()
+                if placa and cliente:
+                    CLIENTE_MAP[placa] = cliente
 
+# Ejecutar al cargar
 cargar_clientes_nuevos()
-
 PLACAS = list(CLIENTE_MAP.keys())
 
 
