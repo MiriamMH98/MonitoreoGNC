@@ -192,32 +192,33 @@ st.title("Análisis Semanal de Consumo GNC")
 st.sidebar.header("Configuración")
 n_semanas = st.sidebar.slider("Número de semanas", min_value=2, max_value=6, value=4)
 
+
+st.sidebar.markdown("---")
 st.sidebar.subheader("➕ Agregar nueva placa")
-with st.sidebar.form(key="form_nueva_placa"):
-    nueva_placa = st.text_input("Placa", max_chars=20)
-    nuevo_cliente = st.text_input("Cliente")
-    submit = st.form_submit_button("Guardar")
+nueva_placa = st.sidebar.text_input("Nueva placa")
+nuevo_cliente = st.sidebar.text_input("Cliente asociado")
 
-    if submit and nueva_placa and nuevo_cliente:
-        nueva_placa = nueva_placa.strip().upper()
-        nuevo_cliente = nuevo_cliente.strip()
-        
-        if nueva_placa in CLIENTE_MAP:
-            st.warning("La placa ya está registrada.")
-        else:
-            # Actualiza mapa en tiempo real
+if st.sidebar.button("Agregar"):
+    nueva_placa = nueva_placa.strip().upper()
+    nuevo_cliente = nuevo_cliente.strip()
+
+    if nueva_placa and nuevo_cliente:
+        if nueva_placa not in CLIENTE_MAP:
             CLIENTE_MAP[nueva_placa] = nuevo_cliente
-            PLACAS.append(nueva_placa)
-            
-            # Guarda en CSV (crea si no existe)
-            nuevo = not os.path.exists(ARCHIVO_CLIENTES_NUEVOS)
-            with open(ARCHIVO_CLIENTES_NUEVOS, mode='a', newline='', encoding='utf-8') as file:
-                writer = csv.writer(file)
-                if nuevo:
-                    writer.writerow(['placa', 'cliente'])  # encabezado
-                writer.writerow([nueva_placa, nuevo_cliente])
 
-            st.success(f"Placa {nueva_placa} registrada para cliente '{nuevo_cliente}'.")
+            # Añadir al CSV para persistencia
+            existe_archivo = os.path.exists(ARCHIVO_CLIENTES_NUEVOS)
+            with open(ARCHIVO_CLIENTES_NUEVOS, "a", encoding="utf-8", newline='') as file:
+                writer = csv.DictWriter(file, fieldnames=["placa", "cliente"])
+                if not existe_archivo:
+                    writer.writeheader()
+                writer.writerow({"placa": nueva_placa, "cliente": nuevo_cliente})
+            
+            st.sidebar.success(f"Placa {nueva_placa} registrada para {nuevo_cliente}")
+        else:
+            st.sidebar.warning("Esa placa ya está registrada.")
+    else:
+        st.sidebar.error("Debes ingresar una placa y un cliente.")
 
 # 1) Variaciones semanales
 df_var = consumo_variaciones_semanales(n_semanas)
