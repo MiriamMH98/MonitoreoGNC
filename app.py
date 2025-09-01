@@ -439,30 +439,30 @@ st.pyplot(fig)
 # ——————————————————————
 
 # 1) Primero obtén el id de la EDS “GRUPO CISA MONTERREY”
-with get_conn() as conn:
-    df_id = pd.read_sql(
-        "SELECT id_eds FROM erelis2_cat_eds WHERE desc_oasis = %s",
-        conn, params=("GRUPO CISA MONTERREY",)
-    )
-    if df_id.empty:
-        st.error("No se encontró 'GRUPO CISA MONTERREY' en el catálogo de EDS")
-        st.stop()
-    id_cisa = int(df_id.at[0, "id_eds"])
+conn = get_conn()
+df_id = pd.read_sql(
+    "SELECT id_eds FROM erelis2_cat_eds WHERE desc_oasis = %s",
+    conn, params=("GRUPO CISA MONTERREY",)
+)
+if df_id.empty:
+    st.error("No se encontró 'GRUPO CISA MONTERREY' en el catálogo de EDS")
+    st.stop()
+id_cisa = int(df_id.at[0, "id_eds"])
 
 # 2a) Ventas normalizadas de tu Contenedor
 start = datetime(2024, 8, 1)
 end   = datetime.now() + timedelta(days=1)
 
-with get_conn() as conn:
-    df_cont = pd.read_sql(
-        """
-        SELECT placa, cantidad, fecha
-          FROM erelis2_ventas_total
-         WHERE placa = ANY(%s)
-           AND fecha >= %s AND fecha < %s
-        """,
-        conn, params=(PLACAS, start, end)
-    )
+conn = get_conn()
+df_cont = pd.read_sql(
+    """
+    SELECT placa, cantidad, fecha
+        FROM erelis2_ventas_total
+        WHERE placa = ANY(%s)
+        AND fecha >= %s AND fecha < %s
+    """,
+    conn, params=(PLACAS, start, end)
+)
 
 # --- FILTRO ESPECÍFICO PARA CONTENEDOR ---
 df_cont = df_cont[df_cont['placa'].isin(['E5772', '7HU2382'])]
