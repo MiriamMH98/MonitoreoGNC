@@ -95,12 +95,15 @@ def cargar_clientes_nuevos():
     if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
         with open(ARCHIVO_CLIENTES_NUEVOS, "r", encoding="utf-8") as file:
             reader = csv.DictReader(file)
+            if "placa" not in reader.fieldnames or "cliente" not in reader.fieldnames:
+                st.warning("⚠️ El archivo 'clientes_nuevos.csv' no tiene los encabezados requeridos: 'placa' y 'cliente'")
+                return
             for row in reader:
                 placa = row["placa"].strip()
                 cliente = row["cliente"].strip()
                 if placa and cliente:
                     CLIENTE_MAP[placa] = cliente
-
+                    
 # Ejecutar al cargar
 cargar_clientes_nuevos()
 PLACAS = list(CLIENTE_MAP.keys())
