@@ -94,19 +94,21 @@ ARCHIVO_CLIENTES_NUEVOS = "clientes_nuevos.csv"
 def cargar_clientes_nuevos():
     if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
         with open(ARCHIVO_CLIENTES_NUEVOS, "r", encoding="utf-8") as file:
-            reader = csv.DictReader(file)
-            if "placa" not in reader.fieldnames or "cliente" not in reader.fieldnames:
-                st.warning("⚠️ El archivo 'clientes_nuevos.csv' no tiene los encabezados requeridos: 'placa' y 'cliente'")
-                return
-            for row in reader:
-                placa = row["placa"].strip()
-                cliente = row["cliente"].strip()
-                if placa and cliente:
-                    CLIENTE_MAP[placa] = cliente
-                    
-# Ejecutar al cargar
+            try:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    if "placa" in row and "cliente" in row:
+                        placa = row["placa"].strip()
+                        cliente = row["cliente"].strip()
+                        if placa and cliente:
+                            CLIENTE_MAP[placa] = cliente
+            except Exception as e:
+                st.warning(f"No se pudo cargar '{ARCHIVO_CLIENTES_NUEVOS}': {e}")
+
+# Cargar clientes adicionales
 cargar_clientes_nuevos()
 PLACAS = list(CLIENTE_MAP.keys())
+
 
 
 clients = [
@@ -216,7 +218,11 @@ if st.sidebar.button("Agregar"):
                 if not existe_archivo:
                     writer.writeheader()
                 writer.writerow({"placa": nueva_placa, "cliente": nuevo_cliente})
-            
+
+            # ✅ Recargar clientes para que se actualicen en la sesión
+            cargar_clientes_nuevos()
+            PLACAS = list(CLIENTE_MAP.keys())
+
             st.sidebar.success(f"Placa {nueva_placa} registrada para {nuevo_cliente}")
         else:
             st.sidebar.warning("Esa placa ya está registrada.")
