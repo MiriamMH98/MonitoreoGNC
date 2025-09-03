@@ -229,6 +229,40 @@ if st.sidebar.button("Agregar"):
     else:
         st.sidebar.error("Debes ingresar una placa y un cliente.")
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("📄 Placas recientemente registradas")
+
+# Leer y mostrar el archivo CSV de clientes nuevos
+if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
+    df_clientes_nuevos = pd.read_csv(ARCHIVO_CLIENTES_NUEVOS)
+    st.sidebar.dataframe(df_clientes_nuevos)
+else:
+    st.sidebar.info("No hay placas nuevas registradas todavía.")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("✏️ Editar cliente existente")
+
+if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
+    df_clientes_nuevos = pd.read_csv(ARCHIVO_CLIENTES_NUEVOS)
+
+    # Seleccionar placa para editar
+    placa_a_editar = st.sidebar.selectbox("Selecciona una placa", df_clientes_nuevos['placa'])
+
+    # Mostrar nombre actual y permitir edición
+    nombre_actual = df_clientes_nuevos.loc[df_clientes_nuevos['placa'] == placa_a_editar, 'cliente'].values[0]
+    nuevo_nombre = st.sidebar.text_input("Nuevo nombre de cliente", value=nombre_actual)
+
+    if st.sidebar.button("Actualizar nombre"):
+        # Actualizar en DataFrame
+        df_clientes_nuevos.loc[df_clientes_nuevos['placa'] == placa_a_editar, 'cliente'] = nuevo_nombre
+        # Guardar de nuevo
+        df_clientes_nuevos.to_csv(ARCHIVO_CLIENTES_NUEVOS, index=False)
+        # Recargar en memoria
+        cargar_clientes_nuevos()
+        PLACAS = list(CLIENTE_MAP.keys())
+        st.sidebar.success(f"Cliente actualizado para la placa {placa_a_editar}")
+
+
 # 1) Variaciones semanales
 df_var = consumo_variaciones_semanales(n_semanas)
 df_var_int = df_var.round(0).astype(int)
