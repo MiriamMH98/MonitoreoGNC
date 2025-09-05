@@ -319,8 +319,13 @@ sql_full = """
   FROM erelis2_ventas_total
   WHERE placa = ANY(%s)
 """
-with get_conn() as conn:
+try:
+    conn = get_conn()
     df_full = pd.read_sql(sql_full, conn, params=(PLACAS,))
+except Exception as e:
+    st.error(f"❌ Error al obtener datos: {e}")
+
+    
 # Normalizar a 30 días
 df_full['fecha']    = pd.to_datetime(df_full['fecha'])
 df_full['mes']      = df_full['fecha'].dt.to_period('M')
