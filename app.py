@@ -291,45 +291,6 @@ st.sidebar.subheader("✏️ Editar cliente existente")
 st.sidebar.markdown("---")
 st.sidebar.subheader("🗑️ Eliminar una placa registrada")
 
-# Lista de placas disponibles
-placas_existentes = sorted(CLIENTE_MAP.keys())
-
-placa_a_eliminar = st.sidebar.selectbox("Selecciona la placa que deseas eliminar", options=placas_existentes)
-confirmar = st.sidebar.checkbox("✅ Confirmo que deseo eliminar esta placa")
-
-if st.sidebar.button("Eliminar placa"):
-    if confirmar:
-        cliente_asociado = CLIENTE_MAP.pop(placa_a_eliminar, None)
-
-if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
-    df_clientes_nuevos = pd.read_csv(ARCHIVO_CLIENTES_NUEVOS)
-
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("✏️ Editar cliente asignado a placa")
-
-    # Seleccionar placa para editar
-    placa_a_editar = st.sidebar.selectbox("Selecciona una placa", df_clientes_nuevos['placa'])
-
-    # Mostrar nombre actual y permitir edición
-    nombre_actual = df_clientes_nuevos.loc[
-        df_clientes_nuevos['placa'] == placa_a_editar, 'cliente'
-    ].values[0]
-    nuevo_nombre = st.sidebar.text_input("Nuevo nombre de cliente", value=nombre_actual)
-
-    if st.sidebar.button("Actualizar nombre"):
-        # Actualizar en DataFrame
-        df_clientes_nuevos.loc[
-            df_clientes_nuevos['placa'] == placa_a_editar, 'cliente'
-        ] = nuevo_nombre
-
-        # Guardar el archivo actualizado
-        df_clientes_nuevos.to_csv(ARCHIVO_CLIENTES_NUEVOS, index=False)
-
-        # 🔁 Actualizar también CLIENTE_MAP directamente
-        CLIENTE_MAP[placa_a_editar] = nuevo_nombre
-
-        st.sidebar.success(f"✅ Cliente actualizado para la placa {placa_a_editar}")
-
 
 
 # 1) Variaciones semanales
