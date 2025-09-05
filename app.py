@@ -200,69 +200,90 @@ n_semanas = st.sidebar.slider("Número de semanas", min_value=2, max_value=6, va
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("➕ Agregar nueva placa")
-nueva_placa = st.sidebar.text_input("Nueva placa")
-nuevo_cliente = st.sidebar.text_input("Cliente asociado")
+
+nueva_placa = st.sidebar.text_input("Nueva placa", key="input_nueva_placa")
+nuevo_cliente = st.sidebar.text_input("Cliente asociado", key="input_nuevo_cliente")
 
 if st.sidebar.button("Agregar"):
     nueva_placa = nueva_placa.strip().upper()
     nuevo_cliente = nuevo_cliente.strip()
-
     if nueva_placa and nuevo_cliente:
         if nueva_placa not in CLIENTE_MAP:
             CLIENTE_MAP[nueva_placa] = nuevo_cliente
+            # Cargar CSV existente o crear uno nuevo
+            df_csv = pd.read_csv(ARCHIVO_CLIENTES_NUEVOS) if os.path.exists(ARCHIVO_CLIENTES_NUEVOS) else pd.DataFrame(columns=['placa', 'cliente'])
 
-            # Añadir o actualizar CSV
-            existe_archivo = os.path.exists(ARCHIVO_CLIENTES_NUEVOS)
-            df_csv = pd.read_csv(ARCHIVO_CLIENTES_NUEVOS) if existe_archivo else pd.DataFrame(columns=['placa', 'cliente'])
-
-            # Verifica si ya existe esa placa
             if nueva_placa not in df_csv['placa'].values:
-                df_csv = df_csv.append({'placa': nueva_placa, 'cliente': nuevo_cliente}, ignore_index=True)
+                df_csv = pd.concat([df_csv, pd.DataFrame([{"placa": nueva_placa, "cliente": nuevo_cliente}])], ignore_index=True)
                 df_csv.to_csv(ARCHIVO_CLIENTES_NUEVOS, index=False)
                 st.sidebar.success(f"Placa {nueva_placa} registrada para {nuevo_cliente}")
             else:
-                st.sidebar.warning("Esa placa ya está registrada en el archivo.")
+                st.sidebar.warning("Esa placa ya está en el archivo.")
         else:
             st.sidebar.warning("Esa placa ya está registrada en la app.")
     else:
         st.sidebar.error("Debes ingresar una placa y un cliente.")
 
+# ----------------------------------------
+# ✏️ Editar cliente asignado a una placa
+# ----------------------------------------
+st.sidebar.markdown("---")
+st.sidebar.subheader("✏️ Editar cliente existente")
+
+if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
+    df_clientes_nuevos = pd.read_csv(ARCHIVO_CLIENTES_NUEVOS)
+
+    if not df_clientes_nuevos.empty:
+        placa_a_editar = st.sidebar.selectbox("Selecciona una placa", df_clientes_nuevos['placa'], key="editar_placa")
+        nombre_actual = df_clientes_nuevos[df_clientes_nuevos['placa'] == placa_a_editar]['cliente'].values[0]
+        nuevo_nombre = st.sidebar.text_input("Nuevo nombre de cliente", value=nombre_actual, key="nuevo_nombre_cliente")
+
+        if st.sidebar.button("Actualizar nombre"):
+            df_clientes_nuevos.loc[df_clientes_nuevos['placa'] == placa_a_editar, 'cliente'] = nuevo_nombre
+            df_clientes_nuevos.to_csv(ARCHIVO_CLIENTES_NUEVOS, index=False)
+            CLIENTE_MAP[placa_a_editar] = nuevo_nombre
+            st.sidebar.success(f"Cliente actualizado para {placa_a_editar}")
+    else:
+        st.sidebar.info("No hay placas para editar.")
+else:
+    st.sidebar.info("No hay archivo de clientes nuevos.")
+
+# ----------------------------------------
+# 🗑️ Eliminar placa
+# ----------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("🗑️ Eliminar una placa registrada")
 
-# Lista de placas disponibles
 placas_existentes = sorted(CLIENTE_MAP.keys())
-
-placa_a_eliminar = st.sidebar.selectbox("Selecciona la placa que deseas eliminar", options=placas_existentes, key="selectbox_eliminar")
-confirmar = st.sidebar.checkbox("✅ Confirmo que deseo eliminar esta placa")
+placa_a_eliminar = st.sidebar.selectbox("Selecciona la placa a eliminar", options=placas_existentes, key="eliminar_placa")
+confirmar = st.sidebar.checkbox("✅ Confirmo que deseo eliminar esta placa", key="confirmar_eliminar")
 
 if st.sidebar.button("Eliminar placa"):
     if confirmar:
         cliente_asociado = CLIENTE_MAP.pop(placa_a_eliminar, None)
-        
-        # Reescribir el CSV sin esa placa
         if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
-            with open(ARCHIVO_CLIENTES_NUEVOS, "r", encoding="utf-8") as file:
-                reader = list(csv.DictReader(file))
-            nueva_lista = [row for row in reader if row["placa"] != placa_a_eliminar]
-            with open(ARCHIVO_CLIENTES_NUEVOS, "w", encoding="utf-8", newline="") as file:
-                writer = csv.DictWriter(file, fieldnames=["placa", "cliente"])
-                writer.writeheader()
-                writer.writerows(nueva_lista)
-
-        st.sidebar.success(f"✅ Placa {placa_a_eliminar} eliminada (cliente: {cliente_asociado})")
+            df_csv = pd.read_csv(ARCHIVO_CLIENTES_NUEVOS)
+            df_csv = df_csv[df_csv['placa'] != placa_a_eliminar]
+            df_csv.to_csv(ARCHIVO_CLIENTES_NUEVOS, index=False)
+        st.sidebar.success(f"Placa {placa_a_eliminar} eliminada (cliente: {cliente_asociado})")
     else:
-        st.sidebar.warning("Marca la casilla de confirmación para eliminar.")
+        st.sidebar.warning("Debes confirmar antes de eliminar.")
 
+# ----------------------------------------
+# 📄 Ver clientes recientemente agregados
+# ----------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.subheader("📄 Placas recientemente registradas")
 
-# Leer y mostrar el archivo CSV de clientes nuevos
 if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
     df_clientes_nuevos = pd.read_csv(ARCHIVO_CLIENTES_NUEVOS)
-    st.sidebar.dataframe(df_clientes_nuevos)
+    if not df_clientes_nuevos.empty:
+        st.sidebar.dataframe(df_clientes_nuevos)
+    else:
+        st.sidebar.info("No hay placas nuevas en el archivo.")
 else:
-    st.sidebar.info("No hay placas nuevas registradas todavía.")
+    st.sidebar.info("El archivo de placas no existe todavía.")
+
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("✏️ Editar cliente existente")
