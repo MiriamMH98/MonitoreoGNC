@@ -211,23 +211,48 @@ if st.sidebar.button("Agregar"):
         if nueva_placa not in CLIENTE_MAP:
             CLIENTE_MAP[nueva_placa] = nuevo_cliente
 
-            # Añadir al CSV para persistencia
+            # Añadir o actualizar CSV
             existe_archivo = os.path.exists(ARCHIVO_CLIENTES_NUEVOS)
-            with open(ARCHIVO_CLIENTES_NUEVOS, "a", encoding="utf-8", newline='') as file:
-                writer = csv.DictWriter(file, fieldnames=["placa", "cliente"])
-                if not existe_archivo:
-                    writer.writeheader()
-                writer.writerow({"placa": nueva_placa, "cliente": nuevo_cliente})
+            df_csv = pd.read_csv(ARCHIVO_CLIENTES_NUEVOS) if existe_archivo else pd.DataFrame(columns=['placa', 'cliente'])
 
-            # ✅ Recargar clientes para que se actualicen en la sesión
-            cargar_clientes_nuevos()
-            PLACAS = list(CLIENTE_MAP.keys())
-
-            st.sidebar.success(f"Placa {nueva_placa} registrada para {nuevo_cliente}")
+            # Verifica si ya existe esa placa
+            if nueva_placa not in df_csv['placa'].values:
+                df_csv = df_csv.append({'placa': nueva_placa, 'cliente': nuevo_cliente}, ignore_index=True)
+                df_csv.to_csv(ARCHIVO_CLIENTES_NUEVOS, index=False)
+                st.sidebar.success(f"Placa {nueva_placa} registrada para {nuevo_cliente}")
+            else:
+                st.sidebar.warning("Esa placa ya está registrada en el archivo.")
         else:
-            st.sidebar.warning("Esa placa ya está registrada.")
+            st.sidebar.warning("Esa placa ya está registrada en la app.")
     else:
         st.sidebar.error("Debes ingresar una placa y un cliente.")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🗑️ Eliminar una placa registrada")
+
+# Lista de placas disponibles
+placas_existentes = sorted(CLIENTE_MAP.keys())
+
+placa_a_eliminar = st.sidebar.selectbox("Selecciona la placa que deseas eliminar", options=placas_existentes)
+confirmar = st.sidebar.checkbox("✅ Confirmo que deseo eliminar esta placa")
+
+if st.sidebar.button("Eliminar placa"):
+    if confirmar:
+        cliente_asociado = CLIENTE_MAP.pop(placa_a_eliminar, None)
+        
+        # Reescribir el CSV sin esa placa
+        if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
+            with open(ARCHIVO_CLIENTES_NUEVOS, "r", encoding="utf-8") as file:
+                reader = list(csv.DictReader(file))
+            nueva_lista = [row for row in reader if row["placa"] != placa_a_eliminar]
+            with open(ARCHIVO_CLIENTES_NUEVOS, "w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=["placa", "cliente"])
+                writer.writeheader()
+                writer.writerows(nueva_lista)
+
+        st.sidebar.success(f"✅ Placa {placa_a_eliminar} eliminada (cliente: {cliente_asociado})")
+    else:
+        st.sidebar.warning("Marca la casilla de confirmación para eliminar.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📄 Placas recientemente registradas")
@@ -242,25 +267,48 @@ else:
 st.sidebar.markdown("---")
 st.sidebar.subheader("✏️ Editar cliente existente")
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("🗑️ Eliminar una placa registrada")
+
+# Lista de placas disponibles
+placas_existentes = sorted(CLIENTE_MAP.keys())
+
+placa_a_eliminar = st.sidebar.selectbox("Selecciona la placa que deseas eliminar", options=placas_existentes)
+confirmar = st.sidebar.checkbox("✅ Confirmo que deseo eliminar esta placa")
+
+if st.sidebar.button("Eliminar placa"):
+    if confirmar:
+        cliente_asociado = CLIENTE_MAP.pop(placa_a_eliminar, None)
+
 if os.path.exists(ARCHIVO_CLIENTES_NUEVOS):
     df_clientes_nuevos = pd.read_csv(ARCHIVO_CLIENTES_NUEVOS)
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("✏️ Editar cliente asignado a placa")
 
     # Seleccionar placa para editar
     placa_a_editar = st.sidebar.selectbox("Selecciona una placa", df_clientes_nuevos['placa'])
 
     # Mostrar nombre actual y permitir edición
-    nombre_actual = df_clientes_nuevos.loc[df_clientes_nuevos['placa'] == placa_a_editar, 'cliente'].values[0]
+    nombre_actual = df_clientes_nuevos.loc[
+        df_clientes_nuevos['placa'] == placa_a_editar, 'cliente'
+    ].values[0]
     nuevo_nombre = st.sidebar.text_input("Nuevo nombre de cliente", value=nombre_actual)
 
     if st.sidebar.button("Actualizar nombre"):
         # Actualizar en DataFrame
-        df_clientes_nuevos.loc[df_clientes_nuevos['placa'] == placa_a_editar, 'cliente'] = nuevo_nombre
-        # Guardar de nuevo
+        df_clientes_nuevos.loc[
+            df_clientes_nuevos['placa'] == placa_a_editar, 'cliente'
+        ] = nuevo_nombre
+
+        # Guardar el archivo actualizado
         df_clientes_nuevos.to_csv(ARCHIVO_CLIENTES_NUEVOS, index=False)
-        # Recargar en memoria
-        cargar_clientes_nuevos()
-        PLACAS = list(CLIENTE_MAP.keys())
-        st.sidebar.success(f"Cliente actualizado para la placa {placa_a_editar}")
+
+        # 🔁 Actualizar también CLIENTE_MAP directamente
+        CLIENTE_MAP[placa_a_editar] = nuevo_nombre
+
+        st.sidebar.success(f"✅ Cliente actualizado para la placa {placa_a_editar}")
+
 
 
 # 1) Variaciones semanales
