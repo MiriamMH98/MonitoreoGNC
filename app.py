@@ -233,7 +233,7 @@ st.sidebar.subheader("🗑️ Eliminar una placa registrada")
 # Lista de placas disponibles
 placas_existentes = sorted(CLIENTE_MAP.keys())
 
-placa_a_eliminar = st.sidebar.selectbox("Selecciona la placa que deseas eliminar", options=placas_existentes)
+placa_a_eliminar = st.sidebar.selectbox("Selecciona la placa que deseas eliminar", options=placas_existentes, key="selectbox_eliminar")
 confirmar = st.sidebar.checkbox("✅ Confirmo que deseo eliminar esta placa")
 
 if st.sidebar.button("Eliminar placa"):
