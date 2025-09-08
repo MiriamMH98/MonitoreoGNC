@@ -11,6 +11,8 @@ import matplotlib
 import os
 import csv
 import matplotlib.colors as mcolors
+import colorsys
+
 
 
 # ----------------- Configuración de conexión -----------------
@@ -479,25 +481,32 @@ labels = mensual_comp.index.strftime("%Y-%m")
 x      = np.arange(len(labels))
 
 
-def generar_colores_variados(base_colors, n):
-    colores = []
-    factor = 0.9  # intensidad de atenuación progresiva
-    repeticiones = (n // len(base_colors)) + 1
+def expandir_colores_base(colores_hex, cantidad_final):
+    colores_expandidos = []
 
-    for i in range(repeticiones):
-        for color in base_colors:
-            if len(colores) >= n:
-                break
-            rgb = mcolors.to_rgb(color)
-            scale = factor ** i
-            color_suave = tuple(min(1, c * scale) for c in rgb)
-            colores.append(color_suave)
-    return colores[:n]
+    for hex_color in colores_hex:
+        # Convertir hex a HLS
+        rgb = mcolors.to_rgb(hex_color)
+        h, l, s = colorsys.rgb_to_hls(*rgb)
 
-# Lista base
+        # Generar variaciones en luminosidad
+        variaciones = [l + 0.05*i for i in range(-2, 3) if 0 < l + 0.05*i < 1]
+
+        for lv in variaciones:
+            r, g, b = colorsys.hls_to_rgb(h, lv, s)
+            colores_expandidos.append((r, g, b))
+
+            if len(colores_expandidos) >= cantidad_final:
+                return colores_expandidos
+
+    return colores_expandidos[:cantidad_final]
+
+# Paleta original
 colors_base = ["#8B4513", "#002B49", "#6B8E23", "#082B29", "#99C7EE", "#444343"]
-# Generar n colores cercanos
-colors = generar_colores_variados(colors_base, len(clientes_graf))
+
+# Clientes a graficar
+n_clientes = len(clientes_graf)
+colors = expandir_colores_base(colors_base, n_clientes)
 
 
 fig, ax = plt.subplots(figsize=(12,6))
