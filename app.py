@@ -12,6 +12,7 @@ import os
 import csv
 import matplotlib.colors as mcolors
 import colorsys
+import random
 
 
 
@@ -481,32 +482,42 @@ labels = mensual_comp.index.strftime("%Y-%m")
 x      = np.arange(len(labels))
 
 
-def expandir_colores_base(colores_hex, cantidad_final):
+def expandir_colores_base_variante(colores_hex, cantidad_final):
     colores_expandidos = []
 
     for hex_color in colores_hex:
-        # Convertir hex a HLS
         rgb = mcolors.to_rgb(hex_color)
         h, l, s = colorsys.rgb_to_hls(*rgb)
 
-        # Generar variaciones en luminosidad
-        variaciones = [l + 0.05*i for i in range(-2, 3) if 0 < l + 0.05*i < 1]
+        # Variaciones en tono y luminosidad
+        for i in range(-3, 4):
+            delta_h = i * 0.05
+            delta_l = i * 0.05
+            nuevo_h = (h + delta_h) % 1.0
+            nuevo_l = min(max(l + delta_l, 0.2), 0.8)  # mantener contraste
 
-        for lv in variaciones:
-            r, g, b = colorsys.hls_to_rgb(h, lv, s)
+            r, g, b = colorsys.hls_to_rgb(nuevo_h, nuevo_l, s)
             colores_expandidos.append((r, g, b))
 
             if len(colores_expandidos) >= cantidad_final:
                 return colores_expandidos
 
+    # Si aún no alcanza, completar con colores aleatorios suaves
+    while len(colores_expandidos) < cantidad_final:
+        h = random.random()
+        l = random.uniform(0.3, 0.7)
+        s = 0.6
+        r, g, b = colorsys.hls_to_rgb(h, l, s)
+        colores_expandidos.append((r, g, b))
+
     return colores_expandidos[:cantidad_final]
 
-# Paleta original
+# Paleta base tuya
 colors_base = ["#8B4513", "#002B49", "#6B8E23", "#082B29", "#99C7EE", "#444343"]
 
 # Clientes a graficar
 n_clientes = len(clientes_graf)
-colors = expandir_colores_base(colors_base, n_clientes)
+colors = expandir_colores_base_variante(colors_base, n_clientes)
 
 
 fig, ax = plt.subplots(figsize=(12,6))
