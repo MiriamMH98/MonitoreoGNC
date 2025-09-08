@@ -10,6 +10,7 @@ import matplotlib.dates as mdates
 import matplotlib
 import os
 import csv
+import matplotlib.colors as mcolors
 
 
 # ----------------- Configuración de conexión -----------------
@@ -285,12 +286,6 @@ else:
     st.sidebar.info("El archivo de placas no existe todavía.")
 
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("✏️ Editar cliente existente")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🗑️ Eliminar una placa registrada")
-
 
 
 # 1) Variaciones semanales
@@ -325,7 +320,7 @@ try:
 except Exception as e:
     st.error(f"❌ Error al obtener datos: {e}")
 
-    
+
 # Normalizar a 30 días
 df_full['fecha']    = pd.to_datetime(df_full['fecha'])
 df_full['mes']      = df_full['fecha'].dt.to_period('M')
@@ -482,7 +477,28 @@ mensual_comp = mensual.reindex(
 # 10) Graficar stacked‐bar con etiquetas
 labels = mensual_comp.index.strftime("%Y-%m")
 x      = np.arange(len(labels))
-colors = plt.cm.tab20.colors  # más colores si hay más clientes
+
+
+def generar_colores_variados(base_colors, n):
+    colores = []
+    factor = 0.9  # intensidad de atenuación progresiva
+    repeticiones = (n // len(base_colors)) + 1
+
+    for i in range(repeticiones):
+        for color in base_colors:
+            if len(colores) >= n:
+                break
+            rgb = mcolors.to_rgb(color)
+            scale = factor ** i
+            color_suave = tuple(min(1, c * scale) for c in rgb)
+            colores.append(color_suave)
+    return colores[:n]
+
+# Lista base
+colors_base = ["#8B4513", "#002B49", "#6B8E23", "#082B29", "#99C7EE", "#444343"]
+# Generar n colores cercanos
+colors = generar_colores_variados(colors_base, len(clientes_graf))
+
 
 fig, ax = plt.subplots(figsize=(12,6))
 bottom = np.zeros(len(x))
