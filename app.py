@@ -513,7 +513,7 @@ def expandir_colores_base_variante(colores_hex, cantidad_final):
     return colores_expandidos[:cantidad_final]
 
 # Paleta base tuya
-colors_base = ["#0375B4", "#002B49", "#6B8E23", "#082B29", "#99C7EE", "#444343"]
+colors_base = ["#0375B4", "#002B49", "#6B8E23", "#5297D4", "#999895"]
 
 # Clientes a graficar
 n_clientes = len(clientes_graf)
